@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'">
+  <title>Quotalala</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="workspace">
+    <aside class="history-sidebar">
+      <div class="sidebar-brand"><div class="logo-icon">q.</div><strong>Quotalala</strong><span class="local-dot" title="Local"></span></div>
+      <button id="chooseFolderBtn" class="project-picker"><span class="folder-mark">▱</span><span><small data-i18n="activeProject"></small><strong id="sidebarProjectName"></strong></span><span class="picker-chevron">⌄</span></button>
+      <select id="recentProjects" aria-label="Projects"><option value="" data-i18n="switchProject"></option></select>
+      <button id="newSessionBtn" class="new-session"><span>＋</span><span data-i18n="newSession"></span><kbd>Ctrl N</kbd></button>
+      <div class="history-heading"><span data-i18n="history"></span><span id="historyCount">0</span></div>
+      <div id="historyList"></div>
+      <div class="sidebar-bottom"><span class="sidebar-local"><span class="local-dot"></span><span data-i18n="localOnly"></span></span><button id="settingsBtn" class="btn-ghost" data-i18n="settings"></button></div>
+    </aside>
+    <main class="app-container">
+      <header class="app-header">
+        <div class="breadcrumb"><span data-i18n="workspaceLabel"></span><span class="crumb-divider">/</span><strong id="projectName"></strong></div>
+        <div class="header-actions"><span id="systemHealthBadge" class="status-pill"></span><div class="lang-switcher"><button id="langTr" class="lang-btn active">TR</button><button id="langEn" class="lang-btn">EN</button></div></div>
+      </header>
+      <div class="content-layout">
+        <div class="main-column">
+          <section class="workspace-intro"><div class="eyebrow" data-i18n="workTogether"></div><h1 data-i18n="workspaceTitle"></h1><p data-i18n="workspaceSubtitle"></p></section>
+          <section class="agents-section">
+            <div class="section-header"><h2 data-i18n="yourAgents"></h2><button id="runAllHealthBtn" class="btn-ghost" data-i18n="runAllHealth"></button></div>
+            <div id="agentsGrid" class="agents-grid"></div>
+          </section>
+          <section class="prompt-section">
+            <div class="prompt-box-card">
+              <div class="composer-heading"><label for="promptInput" data-i18n="promptLabel"></label><span id="sessionLabel" class="session-label"></span></div>
+              <textarea id="promptInput" rows="4" data-i18n-placeholder="promptPlaceholder"></textarea>
+              <div class="composer-footer"><span class="composer-context"><span class="folder-mark">▱</span><span id="composerProjectName"></span><span class="context-separator">·</span><span data-i18n="memoryIncluded"></span></span><button id="planAndExecuteBtn" class="btn btn-accent" data-i18n="dispatchBtn"></button></div>
+              <input id="cwdInput" type="hidden">
+            </div>
+            <p id="projectPath" class="project-path"></p>
+          </section>
+          <section class="logs-section">
+            <div class="tabs-header">
+              <div class="tabs-list"><button class="tab-btn active" data-tab="liveStreamTab" data-i18n="tabLiveStream"></button><button class="tab-btn" data-tab="timelineTab" data-i18n="activityHeading"></button><button class="tab-btn" data-tab="terminalLogTab" data-i18n="tabTerminalLog"></button></div>
+              <div class="tab-actions"><button id="copyAllBtn" class="btn-ghost" data-i18n="copyAll"></button><button id="clearLogsBtn" class="btn-ghost" data-i18n="clearLogs"></button></div>
+            </div>
+            <div id="liveStreamTab" class="tab-content active"><div id="streamContainer" class="stream-container selectable" tabindex="0"></div></div>
+            <div id="timelineTab" class="tab-content"><section id="timelineContainer" class="activity-timeline selectable" tabindex="0" hidden></section><div id="timelineEmpty" class="stream-empty" data-i18n="timelinePlaceholder"></div></div>
+            <div id="terminalLogTab" class="tab-content">
+              <div class="filter-bar" id="levelFilters"><button data-level="all" class="active" data-i18n="all"></button><button data-level="error" data-i18n="errors"></button><button data-level="warning" data-i18n="warnings"></button><select id="agentFilter"><option value="all" data-i18n="allAgents"></option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option></select></div>
+              <div id="terminalWindow" class="terminal-window selectable" tabindex="0"></div><div id="errorCards" class="error-cards selectable" tabindex="0"></div>
+            </div>
+          </section>
+        </div>
+        <aside class="context-panel">
+          <div class="context-header"><span class="context-symbol">◈</span><h2 data-i18n="contextTitle"></h2></div>
+          <div class="context-project"><span data-i18n="activeProject"></span><strong id="contextProjectName"></strong><p data-i18n="projectContextHint"></p></div>
+          <details id="memoryDetails" open><summary data-i18n="projectMemory"></summary><p class="memory-hint" data-i18n="memoryHint"></p><div class="input-group"><textarea id="memoryInput" rows="9" maxlength="2000" data-i18n-placeholder="memoryPlaceholder"></textarea></div><div class="memory-actions"><span id="memoryCount">0/2000</span><button id="saveMemoryBtn" class="btn btn-secondary" data-i18n="save"></button></div><button id="resetMemoryBtn" class="btn-ghost reset-memory" data-i18n="resetMemory"></button></details>
+          <div class="context-note"><span class="note-mark">↗</span><p data-i18n="coordinationHint"></p></div>
+          <div class="privacy-note"><span class="local-dot"></span><p data-i18n="localHistoryHint"></p></div>
+        </aside>
+      </div>
+      <div id="notice" role="status" aria-live="polite"></div>
+    </main>
+  </div>
+  <dialog id="settingsDialog"><div class="section-header"><h2 data-i18n="settings"></h2><button id="closeSettingsBtn" class="btn-ghost" data-i18n="close"></button></div><label class="setting-toggle"><input type="checkbox" id="saveHistoryInput"><span data-i18n="saveHistory"></span></label><p data-i18n="privacyHint"></p><button id="clearHistoryBtn" class="btn btn-secondary" data-i18n="clearHistory"></button><details><summary data-i18n="modelSettings"></summary><p data-i18n="modelHint"></p><div class="input-group"><textarea id="modelsInput" rows="12"></textarea></div><button id="saveModelsBtn" class="btn btn-secondary" data-i18n="saveModels"></button></details></dialog>
+  <script src="log-model.js"></script><script src="../shared/activity.js"></script><script src="app.js"></script>
+</body>
+</html>

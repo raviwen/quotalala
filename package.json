@@ -1,0 +1,70 @@
+{
+  "name": "quotalala",
+  "version": "1.0.0",
+  "description": "Desktop AI quota & coordination manager for Claude, Codex, and Gemini",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/unit.test.js",
+    "test:ui": "electron test/ui-test.js",
+    "test:startup": "electron test/startup-test.js",
+    "check": "node test/preflight.js",
+    "check:package": "node test/package-check.js",
+    "build": "electron-builder"
+  },
+  "keywords": [
+    "claude",
+    "codex",
+    "gemini",
+    "quota",
+    "coordinator",
+    "electron"
+  ],
+  "author": "Quotalala Contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "44.7.1",
+    "electron-builder": "26.15.3"
+  },
+  "engines": { "node": ">=22.12.0" },
+  "build": {
+    "appId": "com.quotalala.app",
+    "productName": "Quotalala",
+    "files": [
+      "src/**/*",
+      "!**/.env*",
+      "!**/*auth*.json",
+      "!**/*creds*.json",
+      "!**/*token*.json",
+      "!**/*.local.json",
+      "!**/*.log",
+      "!**/*.tmp",
+      "!**/.quotalala{,/**}",
+      "!**/.claude{,/**}",
+      "!**/.codex{,/**}",
+      "!**/.gemini{,/**}",
+      "!**/.agy{,/**}",
+      "!**/.antigravity{,/**}",
+      "assets/**/*",
+      "package.json",
+      "LICENSE",
+      "README.md"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "license": "LICENSE",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Quotalala"
+    }
+  }
+}

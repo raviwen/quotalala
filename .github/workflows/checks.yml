@@ -1,0 +1,65 @@
+name: Windows checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check source and offline behavior
+        run: |
+          npm run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test
+      - name: Check runtime dependencies
+        run: npm audit --omit=dev
+      - name: Report build dependency advisories
+        continue-on-error: true
+        run: npm audit
+      - name: Check interface with mock agents
+        run: |
+          Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+          npm run test:ui
+      - name: Check production startup with local fixtures
+        run: |
+          Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+          npm run test:startup
+      - name: Build unsigned Windows installer on manual runs
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run build -- --win --x64 --publish never
+      - name: Verify packaged files
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run check:package -- release/win-unpacked/resources/app.asar
+      - name: Retain verified installer for manual download
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: quotalala-windows-unsigned
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,40 @@
+# Bağımlılıklar
+node_modules/
+
+# Kullanıcı verisi ve yerel ayarlar
+.quotalala/
+.env
+.env.*
+*.local.json
+
+# Giriş bilgileri (asla GitHub'a gitmemeli)
+*creds*.json
+*token*.json
+auth.json
+.gemini/
+.codex/
+.claude/
+.agy/
+.antigravity/
+
+# Build çıktıları
+dist/
+out/
+release/
+*.tgz
+
+# Loglar ve geçici dosyalar
+logs/
+*.log
+npm-debug.log*
+tmp/
+*.tmp
+
+# İşletim sistemi ve editör dosyaları
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+# Local test artifacts (never credentials or real user history)
+.test-artifacts/
