@@ -13,7 +13,7 @@ function readJSON(file, fallback) {
 }
 function writeJSON(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(sanitize(value), null, 2), 'utf8');
   for (let attempt = 0; ; attempt++) {
     try { fs.renameSync(tmp, file); break; }
@@ -32,11 +32,15 @@ class HistoryStore {
   constructor(root = DATA_DIR) { this.root = root; }
   getSettings() {
     const saved = readJSON(path.join(this.root, 'settings.json'), {}) || {};
-    return { saveHistory: saved.saveHistory !== false, geminiEnabled: saved.geminiEnabled === true && saved.geminiRiskAccepted === true, geminiRiskAccepted: saved.geminiRiskAccepted === true };
+    const { runOptions } = require('./run-options');
+    let options;
+    try { options = runOptions(saved); } catch { options = runOptions(); }
+    return { ...options, notificationsEnabled: saved.notificationsEnabled !== false, saveHistory: saved.saveHistory !== false, geminiEnabled: saved.geminiEnabled === true && saved.geminiRiskAccepted === true, geminiRiskAccepted: saved.geminiRiskAccepted === true };
   }
   saveSettings(changes) {
-    const settings = { ...this.getSettings() };
+    const settings = { ...this.getSettings(), ...require('./run-options').runOptions({ ...this.getSettings(), ...changes }) };
     if (typeof changes.saveHistory === 'boolean') settings.saveHistory = changes.saveHistory;
+    if (typeof changes.notificationsEnabled === 'boolean') settings.notificationsEnabled = changes.notificationsEnabled;
     if (typeof changes.geminiEnabled === 'boolean') {
       if (changes.geminiEnabled && changes.geminiRiskAccepted !== true) throw new Error('Gemini risk acceptance is required.');
       settings.geminiEnabled = changes.geminiEnabled;
@@ -49,15 +53,35 @@ class HistoryStore {
     if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Invalid session ID.');
     return path.join(this.root, 'sessions', `${id}.json`);
   }
+  metadataPath(id) { this.sessionPath(id); return path.join(this.root, 'session-summaries', id + '.json'); }
+  recordVersion(id) { const stat = fs.statSync(this.sessionPath(id)); return `${stat.size}:${stat.mtimeMs}`; }
+  summary(session) {
+    const { id, cwd, title, createdAt, updatedAt, agents, status } = session;
+    const { headlines } = require('../shared/activity');
+    return { id, cwd, title, createdAt, updatedAt, agents, status, recordVersion: this.recordVersion(id), recentEvents: forSession(session).slice(-20).map(event => ({ timestamp: event.timestamp, title: headlines([event])[0] })) };
+  }
   list(cwd = null) {
     const dir = path.join(this.root, 'sessions');
     if (!fs.existsSync(dir)) return [];
     return fs.readdirSync(dir).filter(name => /^[0-9a-f-]{36}\.json$/i.test(name))
-      .map(name => readJSON(path.join(dir, name), null))
-      .filter(item => item && typeof item.id === 'string' && /^[0-9a-f-]{36}$/i.test(item.id) && typeof item.cwd === 'string' && path.isAbsolute(item.cwd) && typeof item.updatedAt === 'string' && Array.isArray(item.turns))
-      .map(({ id, cwd, title, createdAt, updatedAt, agents, status }) => ({ id, cwd, title, createdAt, updatedAt, agents, status }))
-      .filter(item => !cwd || projectKey(item.cwd) === projectKey(cwd))
+      .map(name => {
+        const id = name.slice(0, -5), file = this.metadataPath(id);
+        let summary = readJSON(file, null);
+        // One-time migration: subsequent listings never load full outputs.
+        if (!summary || summary.recordVersion !== this.recordVersion(id)) {
+          try { summary = this.summary(this.open(id)); writeJSON(file, summary); } catch { return null; }
+        }
+        return summary;
+      })
+      .filter(item => item && typeof item.cwd === 'string' && typeof item.updatedAt === 'string' && (!cwd || projectKey(item.cwd) === projectKey(cwd)))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+  recoverInterrupted() {
+    for (const summary of this.list()) if (['running', 'awaiting_approval'].includes(summary.status)) {
+      const session = this.open(summary.id); session.status = 'interrupted';
+      for (const turn of session.turns) if (['running', 'awaiting_approval'].includes(turn.status)) turn.status = 'interrupted';
+      writeJSON(this.sessionPath(session.id), session); writeJSON(this.metadataPath(session.id), this.summary(session));
+    }
   }
   open(id) {
     const session = readJSON(this.sessionPath(id), null);
@@ -67,8 +91,9 @@ class HistoryStore {
   recentActivities(cwd, limit = 20, excludeSessionId = null) {
     if (limit <= 0) return [];
     const events = [];
-    for (const session of this.list().filter(item => item.id !== excludeSessionId && projectKey(item.cwd) === projectKey(cwd)).reverse()) {
-      events.push(...forSession(this.open(session.id)));
+    for (const session of this.list().filter(item => item.id !== excludeSessionId && projectKey(item.cwd) === projectKey(cwd))) {
+      events.unshift(...(session.recentEvents || []));
+      if (events.length >= limit) break;
     }
     // Stable chronological order also preserves event order for identical timestamps.
     return events.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp))).slice(-Math.min(20, limit));
@@ -79,11 +104,11 @@ class HistoryStore {
   }
   save(session) {
     session.updatedAt = new Date().toISOString();
-    if (this.getSettings().saveHistory) writeJSON(this.sessionPath(session.id), session);
+    if (this.getSettings().saveHistory) { writeJSON(this.sessionPath(session.id), session); writeJSON(this.metadataPath(session.id), this.summary(session)); }
     return sanitize(session);
   }
-  rename(id, title) { const session = this.open(id); session.title = String(title).trim().slice(0, 120); if (!session.title) throw new Error('A title is required.'); writeJSON(this.sessionPath(id), session); return session; }
-  delete(id) { fs.unlinkSync(this.sessionPath(id)); }
+  rename(id, title) { const session = this.open(id); session.title = String(title).trim().slice(0, 120); if (!session.title) throw new Error('A title is required.'); writeJSON(this.sessionPath(id), session); writeJSON(this.metadataPath(id), this.summary(session)); return session; }
+  delete(id) { fs.unlinkSync(this.sessionPath(id)); if (fs.existsSync(this.metadataPath(id))) fs.unlinkSync(this.metadataPath(id)); }
   clear() {
     // Only delete known JSON records in Quotalala's own directories.
     for (const session of this.list()) this.delete(session.id);
@@ -92,10 +117,10 @@ class HistoryStore {
   }
   memory(cwd) {
     const record = readJSON(path.join(this.root, 'memory', `${projectKey(cwd)}.json`), null);
-    return { cwd: path.resolve(cwd), summary: typeof record?.summary === 'string' ? redact(record.summary).slice(0, MEMORY_LIMIT) : '', updatedAt: typeof record?.updatedAt === 'string' ? record.updatedAt : null };
+    return { resultDigests: Array.isArray(record?.resultDigests) ? record.resultDigests.filter(item => typeof item === 'string' && /^[a-f0-9]{64}$/.test(item)).slice(-256) : [], cwd: path.resolve(cwd), summary: typeof record?.summary === 'string' ? redact(record.summary).slice(0, MEMORY_LIMIT) : '', updatedAt: typeof record?.updatedAt === 'string' ? record.updatedAt : null };
   }
-  saveMemory(cwd, summary, force = false) {
-    const record = { cwd: path.resolve(cwd), summary: redact(summary).slice(0, MEMORY_LIMIT), updatedAt: new Date().toISOString() };
+  saveMemory(cwd, summary, force = false, resultDigests = null) {
+    const record = { resultDigests: (resultDigests || this.memory(cwd).resultDigests).slice(-256), cwd: path.resolve(cwd), summary: redact(summary).slice(0, MEMORY_LIMIT), updatedAt: new Date().toISOString() };
     if (force || this.getSettings().saveHistory) writeJSON(path.join(this.root, 'memory', `${projectKey(cwd)}.json`), record);
     return record;
   }

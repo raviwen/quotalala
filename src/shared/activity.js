@@ -2,6 +2,14 @@
   const labels = {
     activity_session_started: 'Oturum başladı',
     activity_plan_created: 'Claude işi {count} parçaya böldü',
+    activity_direct_task_selected: '{agent}: doğrudan görev seçildi ({level})',
+    activity_agent_question: '{agent} → {toAgent}: {taskTitle} için soru',
+    activity_coordination_started: 'Claude ara sonuçları değerlendiriyor',
+    activity_coordination_completed: 'Claude yönetim yanıtını verdi',
+    activity_coordination_failed: 'Claude yönetim yanıtı alınamadı',
+    activity_coordinator_decision: 'Claude: {reason}',
+    activity_coordinator_reply: 'Claude → {toAgent}: {taskTitle} için yanıt',
+    activity_coordination_stopped: 'Ekip çalışması durdu ({cause})',
     activity_planning_failed: 'Claude planı oluşturamadı',
     activity_task_assigned: '{agent}: {taskTitle} ({level})',
     activity_task_completed: '{agent}: {taskTitle} tamamlandı',
@@ -16,6 +24,7 @@
     activity_session_finished: 'Oturum sona erdi ({status})',
     activity_cause_quota: 'kota', activity_cause_auth: 'giriş gerekli', activity_cause_not_found: 'CLI bulunamadı',
     activity_cause_other: 'hata', activity_cause_unavailable: 'ajan kullanılamıyor',
+    session_cancelled: 'iptal edildi', session_interrupted: 'beklenmedik kapanma',
     session_completed: 'tamamlandı', session_partial: 'kısmen tamamlandı', session_failed: 'başarısız', session_blocked: 'engellendi',
     hafif: 'hafif', orta: 'orta', güçlü: 'güçlü', defaultModel: 'CLI varsayılanı'
   };
@@ -29,6 +38,7 @@
       agent: agentName(event.agent), fromAgent: agentName(event.fromAgent), toAgent: agentName(event.toAgent),
       taskTitle: String(event.taskTitle || '').replace(/\s+/g, ' ').slice(0, 120),
       level: t(event.level || 'defaultModel'), count: event.count || 0,
+      reason: String(event.reason || '').replace(/\s+/g, ' ').slice(0, 180),
       cause: t('activity_cause_' + (event.cause || 'unavailable')), status: t('session_' + event.status)
     };
     return template.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match).slice(0, 240);

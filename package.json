@@ -5,12 +5,14 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/unit.test.js",
+    "test": "node --test test/unit.test.js test/execution.test.js test/team.test.js test/room.test.js",
     "test:ui": "electron test/ui-test.js",
+    "test:instance": "electron test/single-instance-test.js",
     "test:startup": "electron test/startup-test.js",
     "check": "node test/preflight.js",
     "check:package": "node test/package-check.js",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "pack:cli": "npm run check && node scripts/pack-cli.js"
   },
   "keywords": [
     "claude",
@@ -48,7 +50,9 @@
       "assets/**/*",
       "package.json",
       "LICENSE",
-      "README.md"
+      "README*.md",
+      "AGENTS.md",
+      "RELEASE-CHECKLIST.md"
     ],
     "directories": {
       "output": "release"

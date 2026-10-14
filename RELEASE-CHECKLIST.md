@@ -25,6 +25,10 @@ The workflow has not yet run on GitHub at the time of this preparation record. I
 
 ## Before publishing
 
+The npm launcher is a separate generated distribution: `npm run pack:cli` produces a Windows-only `quotalala` archive with a pinned Electron runtime dependency. Its launcher, exact 35-file package inventory and packed application startup in a folder without project markers were verified locally. There are now 26 offline tests. The generated Electron dependency tree reported zero npm audit advisories. No global install has been performed.
+
+`quotalala@1.0.0` was published on 2026-10-14 under the maintainer's `raviwen` npm account with explicit authorization and interactive verification. The registry version, launcher mapping, Electron pin and archive SHA-1 `725d944604d2e7da73268da3445fc58a70f14c44` match the verified upload. [npm package](https://www.npmjs.com/package/quotalala). Future releases must publish the generated archive, never the root development manifest. The npm launcher changes have not yet been committed or pushed to GitHub.
+
 - Initial commit and public repository name `quotalala` were authorized by the maintainer; verify the remote and commit after sending.
 - Run the GitHub checks after the first authorized push.
 - Recheck advisories and decide whether to accept the remaining build-only issue for this release.

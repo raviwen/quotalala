@@ -36,6 +36,13 @@ jobs:
           npm test
       - name: Check runtime dependencies
         run: npm audit --omit=dev
+      - name: Build and verify npm launcher package
+        run: npm run pack:cli
+      - name: Check npm app startup in a project without markers
+        run: |
+          Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+          $stage = (Get-Content .test-artifacts/npm/receipt.json | ConvertFrom-Json).stage
+          node test/npm-startup-test.js $stage
       - name: Report build dependency advisories
         continue-on-error: true
         run: npm audit
@@ -47,6 +54,10 @@ jobs:
         run: |
           Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
           npm run test:startup
+      - name: Check single instance and interrupted task recovery
+        run: |
+          Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+          npm run test:instance
       - name: Build unsigned Windows installer on manual runs
         if: github.event_name == 'workflow_dispatch'
         env:

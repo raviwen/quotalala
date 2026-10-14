@@ -9,8 +9,27 @@ const { errorType } = require('../src/main/events');
 const { HealthService } = require('../src/main/health');
 const { SessionRunner } = require('../src/main/session-runner');
 const LogModel = require('../src/renderer/log-model');
+const { launchOptions } = require('../bin/quotalala');
 const root = path.resolve('.test-artifacts', 'unit-' + randomUUID());
 process.env.QUOTALALA_DATA_DIR = path.join(root, 'quota');
+
+test('npm launcher uses the caller folder even without project markers and rejects Electron flags', () => {
+  const cwd = path.join(root, 'Project with spaces & Unicode İ'); fs.mkdirSync(cwd, { recursive: true });
+  const env = { ELECTRON_RUN_AS_NODE: '1', KEEP: 'yes' };
+  const result = launchOptions([], { cwd, env, appDir: '/app' });
+  assert.deepEqual(result.args, ['/app', '--project', fs.realpathSync(cwd)]);
+  assert.equal(result.options.cwd, fs.realpathSync(cwd));
+  assert.equal(result.options.env.ELECTRON_RUN_AS_NODE, undefined);
+  assert.equal(env.ELECTRON_RUN_AS_NODE, '1');
+  assert.equal(result.options.env.KEEP, 'yes');
+  assert.equal(result.options.shell, undefined);
+  assert.throws(() => launchOptions(['--no-sandbox'], { cwd }), /Usage/);
+  const child = path.join(cwd, 'nested'); fs.mkdirSync(child);
+  assert.equal(launchOptions(['--project', 'nested'], { cwd }).options.cwd, fs.realpathSync(child));
+  assert.equal(launchOptions(['nested'], { cwd }).options.cwd, fs.realpathSync(child));
+  assert.throws(() => launchOptions(['--project'], { cwd }), /Usage/);
+  assert.throws(() => launchOptions(['missing'], { cwd }));
+});
 
 test('secret masking preserves useful diagnostics and masks nested credentials', () => {
   const secret = 'sk-proj-' + 'a'.repeat(40);
@@ -199,6 +218,7 @@ test('coordinator persists assignments, quota switches, transfers and final revi
       quota.state.agents[agent.id].enabled = agent.id !== 'gemini'; quota.state.agents[agent.id].status = 'idle';
       agent.capabilities = { resume: true, noTools: true };
       agent.runPrompt = async (prompt, options) => {
+        if (options.reason === 'Koordinasyon kararı') return { code: 0, stdout: JSON.stringify({ action: 'finish', reason: 'Mock review', result: `OK ${token}` }), stderr: '', durationMs: 1 };
         if (agent.id === 'codex') { codexCalls++; return { code: 1, stdout: '', stderr: 'quota exceeded', durationMs: 1 }; }
         if (options.reason === 'Planlama') {
           plannerInput = prompt;

@@ -30,7 +30,7 @@ class ModelsManager {
       if (!fs.existsSync(USER_MODELS_PATH)) {
         if (fs.existsSync(DEFAULT_MODELS_PATH)) {
           const defaultContent = fs.readFileSync(DEFAULT_MODELS_PATH, 'utf8');
-          fs.writeFileSync(USER_MODELS_PATH, defaultContent, 'utf8');
+          writeJSON(USER_MODELS_PATH, JSON.parse(defaultContent));
         }
       }
     } catch (err) {

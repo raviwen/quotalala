@@ -1,125 +1,140 @@
-# Quotalala 🎛️
+<p align="center">
+  <img src="assets/icon.png" alt="Quotalala Q logo" width="104" height="104">
+</p>
+<h1 align="center">Quotalala</h1>
+<p align="center">One prompt. Your project. Claude, Codex and optional Gemini.</p>
+<p align="center">
+  <strong>🇬🇧 English</strong> · <a href="README.tr.md">🇹🇷 Türkçe</a> · <a href="README.de.md">🇩🇪 Deutsch</a> · <a href="README.es.md">🇪🇸 Español</a> · <a href="README.fr.md">🇫🇷 Français</a>
+</p>
+<p align="center">
+  <a href="https://www.npmjs.com/package/quotalala">npm</a> · <a href="LICENSE">MIT</a> · Windows · Node.js 22.12+
+</p>
 
-**Quotalala** is a local desktop application built with Electron that automatically distributes a single prompt across Claude, ChatGPT (Codex), and Google Gemini subscription quotas without wasting usage limits. Claude serves as the main coordinator and synthesizer.
+Quotalala is a local Electron desktop app that coordinates your authenticated AI CLIs. Open it from your project, write one prompt, and let Claude plan the work, assign tasks and review the results. That project's saved conversations and memory load automatically.
 
----
+## Start in your project
 
-## Key Principles & Guarantees
+Open a terminal **inside the project you want to work on**:
 
-- **No API Keys**: Only invokes installed and authenticated command-line tools on your machine (`claude -p`, `codex exec`, `agy`), with prompts sent through stdin.
-- **Zero Credential Scraping**: Never reads, copies, or proxies user auth tokens or session secrets.
-- **Secure Architecture**: Electron desktop app with `contextIsolation: true`, `nodeIntegration: false`, and sandboxed IPC communication.
-- **Windows-Optimized**: Native handling of `.cmd`, `.bat`, and `.exe` binaries, piping prompts through `stdin` to eliminate command-line character escaping issues.
-- **System Tray & Desktop Notifications**: Minimizes to system tray on close with real-time quota status on hover and Windows reminder notifications when quotas are approaching renewal.
-
----
-
-## Architecture & Project Structure
-
-```
-quotalala/
-├── src/
-│   ├── main/                   # Electron main process
-│   │   ├── main.js             # Window, system tray, native notifications
-│   │   ├── preload.js          # Secure contextBridge IPC
-│   │   ├── coordinator.js      # Claude task breakdown & synthesis
-│   │   ├── quota.js            # Persistent quota & usage tracking
-│   │   ├── cli-locator.js      # Cross-platform CLI binary resolution
-│   │   └── agents/             # Modular agent plugins
-│   │       ├── base-agent.js   # Base agent class
-│   │       ├── claude.js       # Claude Code CLI module
-│   │       ├── codex.js        # Codex / ChatGPT CLI module
-│   │       └── gemini.js       # Google Gemini CLI module
-│   └── renderer/               # Desktop UI (Single Screen)
-│       ├── index.html          # Clean HTML layout
-│       ├── style.css           # Modern dark-mode styling
-│       ├── app.js              # IPC client logic & live streams
-│       └── i18n/               # Multi-language translations
-│           ├── tr.json         # Turkish (default)
-│           └── en.json         # English
-├── assets/                     # Application icons (.ico, .png)
-├── test/                       # Diagnostics & tests
-├── AGENTS.md                   # Agent system guidelines
-├── LICENSE                     # MIT License
-└── package.json
+```powershell
+npx quotalala
 ```
 
----
+Or install once and use the short command:
 
-## Getting Started
+```powershell
+npm install -g quotalala
+quotalala
+```
 
-### Prerequisites
+The current folder becomes the agents' working directory, even without `.git` or a project manifest. To open another folder:
 
-- Node.js 22.12+ for development (tested on Node v24). The installed desktop application includes its own runtime.
-- Local AI CLI tools installed and logged in:
-  - **Claude Code**: `@anthropic-ai/claude-code` (`claude auth status`)
-  - **Codex CLI**: `codex-cli` (`codex login status`)
-  - **Antigravity CLI (Gemini)**: `agy` (optional, disabled by default; sign in interactively)
+```powershell
+quotalala --project "C:\projects\my-app"
+```
 
-> [!WARNING]
-> **Gemini / Antigravity CLI Notice**: Some accounts using Antigravity CLI automation have reportedly been restricted by Google. Gemini starts disabled and requires explicit acceptance of the risk notice on its card. Its stdin and optional effort capabilities are checked against the installed CLI's help; unverified flags are never used.
+**Requirements:** Windows, Node.js 22.12+ and installed, signed-in `claude` and `codex` CLIs. Check sign-in with `claude auth status` and `codex login status`. The optional Gemini agent uses `agy`. The first npm installation downloads Electron; a separate Quotalala installer and native compilation are unnecessary. This command opens a desktop window.
 
-### Development Mode
+## What changes
 
-```bash
-# Install dependencies
+| Working manually | With Quotalala |
+| --- | --- |
+| Repeat the same context across agents | Send one prompt; Claude creates a plan |
+| Decide who should do each task | Tasks include an agent, model tier and reason |
+| Copy results between tools | The coordinator passes task outputs along |
+| Reconstruct where you left off | Open the project's conversations, timeline and editable memory |
+
+1. **Plan:** Claude breaks the prompt into tasks using local quota state and project context.
+2. **Execute:** Tasks go to Claude, Codex or enabled Gemini. Quota errors can trigger a handoff; unavailable models fall back to the CLI default.
+3. **Review:** Claude combines and checks the results. The timeline shows assignments, transfers and failures, with expandable inputs and outputs.
+
+Local usage and quota-error records guide routing; they are not a live provider quota meter or a guarantee of lower usage.
+
+
+
+
+## A little team room
+
+The main screen now has a small animated office: Claude leads, Codex builds, and optional Gemini researches. Desks react to actual task events—working, waiting for an answer, receiving a reply, finishing or stopping. Click a speech bubble or the delivery strip to inspect and copy the real message. Expand **Connections and agent details** for the existing health/model controls, or collapse the room to save space.
+
+The room makes **no additional CLI calls**. Agent questions and answers still flow automatically through Claude's existing coordination loop. Disabled Gemini stays off, recorded sessions are labeled, and work animations stop on cancellation and in history. Reduced-motion preferences are respected.
+
+When the app is in the background, quiet desktop notifications announce a finished task, an incomplete/blocked result or a plan awaiting your approval. Clicking opens the relevant session without starting or repeating work. Agent-to-agent chatter and user cancellations do not produce desktop alerts. Toggle **Task notifications** in Settings. Notifications contain generic text, not prompts or agent responses, and their delivery depends on operating-system notification settings.
+
+## Claude manages the team
+
+In Coordinated mode, Claude now remains in charge after the initial plan. Workers can return a result or ask a question. Claude evaluates independent results together, answers waiting agents, assigns a focused consultation to another enabled agent, or creates a specific revision task. The answer then reaches the agent that needs it. Questions, decisions and replies appear in **Team conversation** and the timeline, with selectable and copyable text.
+
+The final management response contains the synthesis, avoiding a separate synthesis call. Coordination uses the light tier and at most **3 management rounds**. All initial, consultation and revision tasks share the existing **8-task / 2-attempt-per-task / 20-call** limits; asking a question and responding to its answer both consume attempts. Completed work is retained; revisions have separate steps. With plan preview enabled, later work and replies also return for editable approval.
+
+To limit context costs, each handoff includes at most 3 selected output excerpts of up to 1600 characters each. Managed calls use fresh CLI conversations with the required context, rather than replaying an entire native transcript. Full outputs remain in local history. Large results can be truncated in shared context, and hitting a budget leaves a partial result rather than claiming completion. Older saved plans keep their earlier execution behavior. Gemini still requires explicit enablement and risk acceptance. Lower usage is an objective, not a provider quota guarantee.
+
+## Execution controls and evidence
+
+- **Economic mode:** choose one agent and tier to run directly. A successful run uses one prompt call; planning, synthesis, memory updates and additional verification are skipped. If Claude coordination is unavailable, use this mode with another available agent. Model/session fallback can add one attempt.
+- **Plan approval:** optionally preview the plan, edit titles/prompts/reasons and agent/tier choices, or remove tasks. The backend validates the edited plan and current agent availability; model names still come from the verified catalog.
+- **Limits:** at most 8 subtasks, 2 prompt attempts per task (including model fallback and handoff), and 20 prompt calls per run. Repeated failed operations are skipped. Set the per-call timeout from 1 to 1800 seconds (default 180); help discovery has its own 10-second timeout.
+- **Live output and Stop:** stdout/stderr are displayed through restricted IPC with selectable, copyable text. Stop terminates the process tree, skips queued work and records cancellation separately from failure. Completed tasks and partial output remain saved. Output appears when the CLI emits it; some CLI formats buffer until completion.
+- **Continue:** cancelled, failed or interrupted work reuses its saved plan and successful outputs; only missing steps run. This cannot undo side effects from a partly completed step, so inspect partial changes before retrying it. A completed conversation accepts a new follow-up prompt.
+- **Evidence:** a zero exit code alone does not establish success. Agent-reported results and independently unverified results are labeled separately. The result shows locally observed file metadata changes, agent-supplied file/line references, and command/exit-code events exposed by the CLI (currently Codex). Review tasks require file/line evidence; general explanations do not. Claude synthesis is explicitly not an independent test. Optional additional verification uses quota and reports its output and observed command evidence without claiming universal test coverage.
+- **Memory and history:** only successful new output can trigger a memory call; exact duplicate outputs are remembered across sessions using at most 256 digests. Summaries remain capped at 2000 characters. History lists use small summary records, loading full outputs on demand. Legacy records migrate once; extremely large histories may take time on the first migration.
+- **One desktop instance:** a second launch forwards its project request to the existing window. While a task is active, the request waits; the running task keeps its original working directory. Unique temporary files protect atomic JSON writes; interrupted sessions are marked on startup and can be continued from history.
+
+File metadata is observational evidence, not a content diff or proof that the agent alone made a change. Claude/agy checks without structured execution events remain agent claims. Live output is checkpointed periodically; an abrupt crash may lose the latest second of streamed text. Saving must be enabled for recovery. Windows process-tree cleanup is tested; macOS/Linux behavior still needs platform testing.
+
+## Your project remembers
+
+- Conversations are grouped by project. Open, rename, delete or continue a session.
+- After successful coordinated runs with new output, Claude updates an editable project summary of up to **2000 characters**. Planning also receives at most **20 activity headings**.
+- Outputs and logs can be selected and copied. Filter logs by severity or agent; error cards show a suggested fix and copyable raw output.
+
+`Ctrl+N` starts a conversation. `Ctrl+Enter` sends the prompt. The interface supports Turkish and English; these README translations do not add interface languages.
+
+## Local storage and permissions
+
+No API keys, credential-file scraping, proxies or account sharing. Quotalala sends prompts through stdin to official CLIs using your own signed-in accounts. Sessions and memory are JSON in `~/.quotalala/sessions/` and `~/.quotalala/memory/`. Settings can disable saving or clear history; project memory can be edited or reset. Native CLIs may retain their own transcripts.
+
+Recognizable keys and tokens are masked before saving. Pattern-based masking cannot detect every secret; review diagnostics before sharing them. Opening a folder does not bypass CLI sandbox policies. A successful CLI exit is not sufficient to mark a blocked review as completed.
+
+> **Gemini is disabled by default.** Its card requires acceptance of a risk notice before enabling `agy`, explaining reported account restrictions related to automated use. No Gemini model names ship without verification on the development machine.
+
+## Desktop installer
+
+The Windows NSIS installer is also supported as a build target and does not require Node.js:
+
+```powershell
+& "C:\path\to\Quotalala.exe" --project "C:\projects\my-app"
+```
+
+Launching the executable from a folder with a marker such as `.git`, `AGENTS.md` or `package.json` detects that project. Otherwise it restores the last project. The sidebar lets you switch projects or choose a first folder. No installer Release has been published yet; the locally verified installer is unsigned.
+
+<details>
+<summary><strong>Development, tests and packaging</strong></summary>
+
+Run these in the cloned Quotalala repository:
+
+```powershell
 npm ci
-
-# Run desktop application
 npm start
+npm test
+npm run test:ui
+npm run test:startup
+npm run test:instance
+npm run check
+npm run pack:cli
+npm run build -- --win --publish never
 ```
 
-### Packaging Windows Installer
+Use `npm start -- --project "C:\projects\my-app"` to develop against another project. Tests use mocked CLIs and local fixtures. Real quota tests require explicit permission; see [AGENTS.md](AGENTS.md).
 
-```bash
-# Builds NSIS .exe installer in release/
-npm run build
-```
+`pack:cli` creates a standalone npm archive with a pinned Electron dependency and validates its file list. Publish the generated archive, not the root development manifest. NSIS packaging uses Electron as a development dependency. Neither command publishes automatically.
 
----
+Models live in `~/.quotalala/models.json`, with required source metadata, editable in Settings. Preview models are excluded from default choices. Automatic model discovery and Gemini thinking-level controls remain pending. macOS and Linux support is planned.
 
-## History and project memory
+See [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) for release checks and known build dependency advisories. The app uses a sandboxed renderer, context isolation and a restricted IPC bridge; backend logic lives in `src/main/`, interface files in `src/renderer/`.
 
-Open a project once using the sidebar folder picker. The active project controls all task working directories, conversation history and project memory; there is no per-task path entry. Quotalala remembers the last project and lists recent folders. Its workspace preference is stored locally in `~/.quotalala/workspace.json`, independently of whether conversation saving is enabled.
-
-To launch directly into a folder, use `Quotalala.exe --project "C:\path\to\project"` (development: `npm start -- --project "C:\path\to\project"`). Launching from a directory with common project markers also selects that directory. A fresh installer launch without a project asks you to open a folder. The application checks that the directory is readable before spending CLI quota; it does not bypass the CLI's own sandbox or policy. The sidebar shows Quotalala conversations for the active folder, rather than importing arbitrary Claude/Codex/Gemini transcripts.
-
-The desktop layout has a conversation sidebar, compact agent cards, a central task composer and a project-memory panel. Outputs, activity timeline and diagnostic logs have separate tabs. `Ctrl+N` opens a new conversation and `Ctrl+Enter` sends a task from the composer.
-
-Each coordinated run records its prompt, plan, agent/model choices, outputs, structured logs and status. Open, rename, delete or continue sessions from the project-grouped sidebar. Continuing uses an exact native CLI session ID when supported; if that session is unavailable, project memory provides the context. Resume support is verified using at most two help commands per CLI per application run. Claude and Codex support was verified locally; `agy` was unavailable on the development machine.
-
-Data stays in `~/.quotalala/sessions/` and `~/.quotalala/memory/` as JSON. Claude updates a bounded 2000-character project summary after each saved run, using the light model tier. You can edit this summary, reset a project's memory, turn off saving, or delete all sessions and memories in Settings. Disabling saving also skips automatic memory generation; explicitly saving an edited summary still stores it. CLI tools may independently retain their own transcripts.
-
-Recognizable API keys, bearer tokens, JWTs and labeled secrets are masked before Quotalala writes records. Redaction is pattern based and cannot recognize every possible unlabeled secret; review raw diagnostics before sharing them. Quota error history remains capped at 200 characters per entry, independently of full session output.
-
-Logs support severity and agent filters, text selection, Ctrl+C, a native Copy/Select All context menu, row copy controls and Copy All. Error cards provide a localized explanation, suggested fix and copyable raw output. Task outputs have the same selection/copy controls. All generated content is inserted as text rather than executable HTML.
-
-Models come from `~/.quotalala/models.json`; Settings exposes the list with required source metadata. The planner selects a tier and the backend resolves it to a model. Preview models are excluded from default choices. An unavailable model falls back to the CLI default with a warning. Automatic model catalog discovery is still pending.
-
-Gemini has no bundled model names because they could not be verified on the development machine. Add a model with an actual CLI/local-source reference after verifying your `agy` installation, or use its default model. Invalid local model catalogs fall back to the validated bundled list without replacing your file.
-
-Sessions also retain a structured activity timeline: planning, assignments with model/tier/reason, completion or failure, output transfers, quota-driven agent changes and final review. Expand an event to inspect and copy its input/output; related assignment and completion records are linked without duplicating payloads. Events appear live and are saved immediately with the existing secret masking and history preferences. Older sessions without activity records show an empty timeline notice.
-
-Planning receives project memory plus at most 20 short activity headings from that project. When continuing a session, its own timeline headings take priority within that same 20-event budget. Complete historical event inputs and outputs are never included in this activity context.
-
-## Validation
-
-Task completion is evaluated separately from a successful CLI exit. Codex command failures are retained alongside the final answer. Project review tasks require file/line references and, when command telemetry is available, a successful file-read command. A policy-denied task is shown as blocked and does not increase the completed-job counter. Remaining file-review tasks are skipped after a shared access denial; Quotalala does not automatically route around the policy with another agent or disable CLI protections. This detects common failure reports and command evidence; it is not a proof that every finding is correct.
-
-```bash
-npm test         # Offline unit/integration tests, mocked CLIs
-npm run test:ui  # Electron UI tests, mocked CLIs and local fixture storage
-npm run test:startup # Production IPC startup with local fixtures
-npm run check    # Git candidate files, syntax, translations, lockfile and secret patterns
-npm run check:package -- path/to/app.asar # Compare a built package with current source
-```
-
-Fixtures and screenshots stay in `.test-artifacts/`, which is ignored by Git. The opt-in `node test/e2e-real.js --approved` performs one short real coordinated flow and writes to the normal local store. Run it only after permission to use CLI quota and create records outside the repository. Do not run live diagnostics automatically on startup.
-
-## Release preparation
-
-Windows source checks and mocked Electron tests are configured in `.github/workflows/checks.yml`. A manual Actions run also builds and verifies an unsigned installer for download, without publishing a Release. See [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) for verified checks, known build dependency advisories and the remaining release steps.
+</details>
 
 ## License
 
-MIT © Quotalala Contributors
+[MIT](LICENSE) · Quotalala Contributors

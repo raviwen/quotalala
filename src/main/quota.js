@@ -94,7 +94,7 @@ class QuotaManager {
   saveState() {
     try {
       this.ensureDirectory();
-      fs.writeFileSync(STORE_PATH, JSON.stringify(sanitize(this.state), null, 2), 'utf8');
+      require('./storage').writeJSON(STORE_PATH, this.state);
     } catch (e) {
       console.error('Quota store save error:', e.message);
     }

@@ -62,6 +62,7 @@ function findExecutable(commandName) {
 function runWithStdin(cmd, args = [], input = '', options = {}) {
   return new Promise((resolve) => {
     const startTime = Date.now();
+    if (options.signal?.aborted) return resolve({ code: -998, cancelled: true, stdout: '', stderr: '', durationMs: 0 });
     const resolvedCmd = findExecutable(cmd);
     const timeoutMs = options.timeout || 60000;
 
@@ -79,6 +80,7 @@ function runWithStdin(cmd, args = [], input = '', options = {}) {
         cwd: options.cwd || process.cwd(),
         shell: false,
         windowsHide: true,
+        detached: process.platform !== 'win32',
         windowsVerbatimArguments: isCmd,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, ...options.env }
@@ -96,51 +98,50 @@ function runWithStdin(cmd, args = [], input = '', options = {}) {
     let stderr = '';
     let isFinished = false;
 
-    const timer = setTimeout(() => {
-      if (!isFinished) {
-        isFinished = true;
-        try {
-          if (process.platform === 'win32' && proc.pid) {
-            spawn('taskkill', ['/pid', String(proc.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' }).on('error', () => proc.kill());
-          } else proc.kill('SIGKILL');
-        } catch {}
-        resolve({
-          code: -999,
-          stdout: stdout.trim(),
-          stderr: (stderr + '\n[Quotalala]: Zaman aşımı (Timeout: ' + timeoutMs + 'ms)').trim(),
-          durationMs: Date.now() - startTime
-        });
-      }
-    }, timeoutMs);
-
-    proc.stdout.on('data', (d) => { stdout += d.toString(); });
-    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    let stopCode = null, cleanupTimer, cleanupPending = false, closed = false, cleanupUnconfirmed = false;
+    const finish = code => {
+      if (isFinished) return;
+      isFinished = true; clearTimeout(timer); clearTimeout(cleanupTimer);
+      options.signal?.removeEventListener('abort', cancel);
+      resolve({ code: stopCode ?? code, cancelled: stopCode === -998, timedOut: stopCode === -999, cleanupUnconfirmed,
+        stdout: stdout.trim(), stderr: stderr.trim(), durationMs: Date.now() - startTime });
+    };
+    const stop = code => {
+      if (isFinished || stopCode !== null) return;
+      stopCode = code;
+      if (code === -999) stderr += `\nTimeout: ${timeoutMs}ms`;
+      // Kill the process group/tree, including shell wrappers and grandchildren.
+      try {
+        if (process.platform === 'win32' && proc.pid) {
+          cleanupPending = true;
+          const killer = spawn('taskkill', ['/pid', String(proc.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' });
+          const killed = success => {
+            cleanupPending = false;
+            if (!success && !closed) { cleanupUnconfirmed = true; try { proc.kill(); } catch {} }
+            if (closed) finish(code);
+          };
+          killer.on('error', () => killed(false));
+          killer.on('close', status => killed(status === 0));
+        } else if (proc.pid) process.kill(-proc.pid, 'SIGKILL');
+      } catch { try { proc.kill('SIGKILL'); } catch {} }
+      cleanupTimer = setTimeout(() => { cleanupUnconfirmed = true; stderr += '\nProcess cleanup could not be confirmed.'; finish(code); }, 5000);
+    };
+    const cancel = () => stop(-998);
+    const timer = setTimeout(() => stop(-999), timeoutMs);
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    if (options.signal?.aborted) cancel();
+    proc.stdout.setEncoding('utf8'); proc.stderr.setEncoding('utf8');
+    proc.stdout.on('data', d => { stdout += d; options.onChunk?.({ stream: 'stdout', text: d }); });
+    proc.stderr.on('data', d => { stderr += d; options.onChunk?.({ stream: 'stderr', text: d }); });
     proc.stdin.on('error', () => { /* A CLI can exit before consuming stdin. */ });
 
     proc.on('close', (code) => {
-      if (!isFinished) {
-        isFinished = true;
-        clearTimeout(timer);
-        resolve({
-          code,
-          stdout: stdout.trim(),
-          stderr: stderr.trim(),
-          durationMs: Date.now() - startTime
-        });
-      }
+      closed = true;
+      if (!cleanupPending) finish(code);
     });
 
     proc.on('error', (err) => {
-      if (!isFinished) {
-        isFinished = true;
-        clearTimeout(timer);
-        resolve({
-          code: -1,
-          stdout: stdout.trim(),
-          stderr: (stderr + '\n' + err.message).trim(),
-          durationMs: Date.now() - startTime
-        });
-      }
+      stderr += '\n' + err.message; finish(-1);
     });
 
     if (input) {

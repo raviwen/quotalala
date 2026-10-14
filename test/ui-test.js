@@ -21,6 +21,7 @@ const state = { agents: {
   codex: { id: 'codex', name: 'ChatGPT / Codex', enabled: true, status: 'idle', jobsCompleted: 0 },
   gemini: { id: 'gemini', name: 'Google Gemini', enabled: false, status: 'idle', jobsCompleted: 0 }
 } };
+let workerCalls = 0;
 let win, selectMenuRequested = false;
 const emit = (channel, data) => win.webContents.send(channel, data);
 const health = new HealthService({
@@ -29,8 +30,15 @@ const health = new HealthService({
   models: { getModelByLevel: () => null }, emit
 });
 const runner = new SessionRunner({ store, emit, coordinator: {
+  validatePlan: value => { if (!value.subtasks.length || value.subtasks.some(task => !state.agents[task.agent]?.enabled)) throw new Error('Invalid plan'); return value; },
   planSubtasks: async (prompt, context) => { context.cliSessions.claude = 'mock-id'; return { summary: 'Mock plan', subtasks: [{ step: 1, title: '<img src=x onerror=alert(1)>', agent: 'claude', level: 'hafif', prompt, rationale: 'Small task', model: 'mock-light' }] }; },
   executePlan: async (plan, context) => {
+    workerCalls++;
+    if (context.prompt === 'cancel fixture') {
+      context.onChunk({ agent: 'claude', stream: 'stdout', text: 'LIVE PARTIAL\n' });
+      await new Promise(resolve => context.signal.addEventListener('abort', resolve, { once: true }));
+      throw Object.assign(new Error('Cancelled'), { cancelled: true });
+    }
     const assigned = context.activity({ type: 'task_assigned', agent: 'claude', model: 'mock-light', level: 'hafif', step: 1, taskTitle: 'API routes', reason: 'Small task', input: 'Mock task input' });
     const output = { step: 1, title: 'OK', agent: 'claude', output: 'OK\nSecond line', model: 'mock-light', success: true };
     context.activity({ type: 'task_completed', agent: 'claude', model: 'mock-light', level: 'hafif', step: 1, taskTitle: 'API routes', assignmentId: assigned.id, output: output.output });
@@ -49,6 +57,7 @@ const handlers = {
   'workspace:get': () => workspace.get(), 'workspace:open': cwd => workspace.open(cwd || process.cwd()),
   'sessions:list': () => store.list(workspace.get().cwd), 'sessions:open': id => store.open(id), 'sessions:rename': ({ id, title }) => store.rename(id, title),
   'memory:get': cwd => store.memory(cwd || process.cwd()), 'memory:save': ({ cwd, summary }) => store.saveMemory(cwd, summary, true),
+  'session:cancel': () => runner.cancel(), 'session:approve': data => runner.approvePlan(data),
   'session:run': data => runner.run({ ...data, cwd: workspace.requireProject() }), 'clipboard:copy': text => clipboard.writeText(text),
   'language:set': () => {}, 'text:menu': () => { selectMenuRequested = true; emit('text:select-all', {}); }
 };
@@ -56,6 +65,7 @@ for (const [name, handler] of Object.entries(handlers)) ipcMain.handle(name, (ev
 async function js(code) { return win.webContents.executeJavaScript(code); }
 async function until(expression) {
   for (let i = 0; i < 100; i++) { if (await js(expression)) return; await new Promise(resolve => setTimeout(resolve, 30)); }
+  console.error(await js("JSON.stringify({busy, notice:document.getElementById('notice').textContent, runDisabled:document.getElementById('planAndExecuteBtn').disabled, pending:!!pendingApproval})"));
   throw new Error('UI condition timed out: ' + expression);
 }
 app.whenReady().then(async () => {
@@ -63,6 +73,19 @@ app.whenReady().then(async () => {
     win = new BrowserWindow({ width: 1420, height: 1000, show: false, webPreferences: { preload: path.resolve('src/main/preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, offscreen: true, backgroundThrottling: false } });
     await win.loadFile(path.resolve('src/renderer/index.html'));
     await until("document.getElementById('geminiToggle') !== null");
+    assert.equal(await js("document.querySelectorAll('.office-station').length"), 3);
+    assert.equal(await js("document.getElementById('room-gemini').dataset.status"), 'disabled');
+    await js("document.getElementById('toggleRoomBtn').click()");
+    assert.equal(await js("getComputedStyle(document.getElementById('roomBody')).display"), 'none');
+    await js("document.getElementById('toggleRoomBtn').click(); document.querySelector('#room-gemini .office-details').click()");
+    assert.equal(await js("document.getElementById('agentCardsDetails').open"), true);
+    await js("document.getElementById('settingsBtn').click()");
+    await until("document.getElementById('settingsDialog').open");
+    assert.equal(await js("document.getElementById('notificationsInput').checked"), true);
+    await js("document.getElementById('notificationsInput').checked=false; document.getElementById('notificationsInput').dispatchEvent(new Event('change'))");
+    for (let i=0;i<50 && store.getSettings().notificationsEnabled;i++) await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal(store.getSettings().notificationsEnabled, false);
+    await js("document.getElementById('closeSettingsBtn').click()");
     assert.equal(await js("document.getElementById('projectName').textContent"), path.basename(process.cwd()));
     assert.equal(await js("document.getElementById('cwdInput').type"), 'hidden');
     assert.equal(await js("document.getElementById('agent-gemini').classList.contains('agent-disabled')"), true);
@@ -122,6 +145,7 @@ app.whenReady().then(async () => {
     assert.equal(store.open(store.list()[0].id).turns[0].activities.length, 8);
     await js("document.getElementById('langEn').click()"); await until("document.getElementById('copyAllBtn').textContent === 'Copy All'");
     assert.equal(await js("document.getElementById('codex-badge').textContent"), 'Sign-in required');
+    assert.equal(await js("document.getElementById('roomTitle').textContent"), 'Our little team room');
     assert.match(await js("document.getElementById('timelineContainer').textContent"), /Activity timeline/);
     assert.match(await js("document.getElementById('timelineContainer').textContent"), /Claude split the work into 1 tasks/);
     await js("document.getElementById('langTr').click()"); await until("document.getElementById('copyAllBtn').textContent === 'Tümünü Kopyala'");
@@ -135,6 +159,26 @@ app.whenReady().then(async () => {
     await until(`document.getElementById('projectName').textContent === ${JSON.stringify(path.basename(process.cwd()))} && document.querySelector('.history-open').textContent === 'OK'`);
     await js("newSession(); document.querySelector('[data-tab=liveStreamTab]').click(); window.getSelection().removeAllRanges(); window.scrollTo(0,0); document.getElementById('notice').textContent=''");
     await new Promise(resolve => setTimeout(resolve, 200));
+    const beforeApproval = workerCalls;
+    await js("newSession(); document.getElementById('previewPlan').checked=true; document.getElementById('promptInput').value='approval fixture'; document.getElementById('planAndExecuteBtn').click()");
+    await until("document.getElementById('planDialog').open"); assert.equal(workerCalls, beforeApproval);
+    await js("document.querySelector('.plan-prompt').value='Edited in UI'; document.getElementById('approvePlanBtn').click()");
+    await until("!busy && !document.getElementById('planDialog').open && !document.getElementById('planAndExecuteBtn').disabled"); assert.equal(workerCalls, beforeApproval + 1);
+    assert.equal(store.open(store.list()[0].id).turns[0].plan.subtasks[0].prompt, 'Edited in UI');
+    await js("newSession(); document.getElementById('previewPlan').checked=false; document.getElementById('promptInput').value='cancel fixture'; document.getElementById('planAndExecuteBtn').click()");
+    await until("document.getElementById('streamContainer').textContent.includes('LIVE PARTIAL')");
+    assert.equal(await js("document.getElementById('stopBtn').disabled"), false);
+    await js("document.getElementById('stopBtn').click()");
+    await until("!busy && document.getElementById('notice').textContent.includes('İptal edildi')");
+    assert.equal(await js("document.getElementById('planAndExecuteBtn').disabled"), false);
+    assert.equal(await js("document.getElementById('stopBtn').disabled"), true);
+    assert.match(await js("document.getElementById('streamContainer').textContent"), /LIVE PARTIAL/);
+    await js("newSession(); document.getElementById('runMode').value='economic'; document.getElementById('runMode').dispatchEvent(new Event('change'))");
+    assert.equal(await js("document.getElementById('previewPlan').disabled && document.getElementById('verifyRun').disabled"), true);
+    assert.equal(await js("document.querySelector('#directAgent option[value=gemini]').disabled"), true);
+    await js("document.getElementById('runMode').value='coordinated'; renderState()");
+    await until("!busy && !document.getElementById('planAndExecuteBtn').disabled");
+    await js("newSession(); document.getElementById('agentCardsDetails').open=false; window.scrollTo(0,0)");
     const image = await win.webContents.capturePage(); fs.writeFileSync(path.join(root, 'ui.png'), image.toPNG());
     win.setSize(1050, 900);
     await new Promise(resolve => setTimeout(resolve, 200));

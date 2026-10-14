@@ -38,8 +38,10 @@ dağıtan yerel bir masaüstü (Electron) uygulamasıdır. Claude baş koordinat
 ## Koordinasyon akışı
 1. Prompt önce Claude'a gider, Claude sadece JSON plan döndürür:
    alt görevler, her biri için ajan (claude/codex/gemini) ve gerekçe.
-2. Backend (main process) görevleri dağıtır, gerekirse çıktıyı diğer ajana aktarır.
-3. Son birleştirme ve kontrolü Claude yapar.
+2. Backend (main process) görevleri dağıtır. Ajanlar tamamlandı / soru / başarısız / engellendi sonucu bildirir.
+3. Claude ara sonuçları topluca değerlendirir; soruları yanıtlar, başka ajana danışma veya somut düzeltme görevi açar. Mesajlar yalnızca ilgili sonuç parçalarıyla aktarılır.
+4. Claude yeterli sonuçta doğrudan nihai sentezi verir; ek sentez çağrısı yapılmaz. En fazla 3 yönetim turu, toplam 8 görev, görev başına 2 deneme (soru/yanıt dahil), çalışma başına 20 çağrı sınırı vardır.
+5. Yeni koordinasyon oturumları managed-v1 akışını kullanır; eski kayıtlı planlar kendi akışlarıyla devam eder. Ekonomik mod tek ajanla doğrudan çalışır.
 
 ## Kota mantığı
 - Her ajan için kullanım sayısı, son kullanım, son kota hatası ve
@@ -108,3 +110,12 @@ dağıtan yerel bir masaüstü (Electron) uygulamasıdır. Claude baş koordinat
 11. Etkinlik zaman çizelgesi: yapılandırılmış koordinasyon olayları, tıklanabilir girdi/çıktı, son 20 başlıkla proje bağlamı ve oturuma devam etme (Tamamlandı)
 12. Görev sonucu doğrulama: CLI çıkış kodundan ayrı engellenme/başarısızlık, incelemede dosya-satır kanıtı ve ortak erişim engelinde gereksiz tekrarları durdurma (Tamamlandı)
 13. Aktif proje, klasöre göre otomatik konuşma/hafıza yükleme, son projeyi hatırlama ve modern masaüstü arayüzü (Tamamlandı)
+14. npm başlatıcısı: proje klasöründe `quotalala` / `npx quotalala`, Electron ile bağımsız paket ve paket içerik doğrulaması (Tamamlandı; npm `quotalala@1.0.0` yayımlandı)
+15. Çok dilli README: Q logosu, hızlı kurulum, dil bağlantıları ve EN/TR/DE/ES/FR kullanım belgeleri (Tamamlandı; yeni belgelerin GitHub ve npm yayını bekliyor)
+16. Ekonomik mod ve kota sınırları: tek ajan/seviye, en fazla 8 alt görev, görev başına 2 deneme ve çalışma başına 20 çağrı; başarısız/aynı çıktıda hafıza çağrısını atlama (Tamamlandı; 256 sonuç özetiyle tekrar tespiti, hafıza 2000 karakter)
+17. Canlı stdout/stderr, süreç ağacını durdurma, ayarlanabilir zaman aşımı, kısmi çıktı ve eksik adımdan devam (Tamamlandı; Windows yerel süreç ve mock ajan testleri; macOS/Linux testi bekliyor)
+18. İsteğe bağlı düzenlenebilir plan onayı, backend doğrulaması ve Claude olmadan doğrudan ajan seçimi (Tamamlandı)
+19. Ajan beyanı/doğrulanan sonuç ayrımı, yerel dosya metaverisi, CLI komut/çıkış kodu kanıtları ve isteğe bağlı ek doğrulama (Tamamlandı; yapılandırılmış komut kanıtı şu an Codex; sentez bağımsız test sayılmaz)
+20. Tek Electron örneği, etkin görevde proje isteğini bekletme, benzersiz atomik kayıt, kesilen oturumları kurtarma ve özet tabanlı geçmiş (Tamamlandı; eski kayıtların ilk dönüşümü bir kez tam okuma yapar)
+21. Claude yönetim döngüsü: ajan soruları, Claude yanıtları, kontrollü ajanlar arası danışma, somut düzeltme görevleri, görünür ekip konuşması, sonraki tur plan onayı ve devam durumunun kaydı (Tamamlandı; en fazla 3 yönetim turu, kotasız mock ve üretim Electron arayüz testleri; gerçek abonelik çağrısı yapılmadı)
+22. Küçük ekip odası: gerçek görev olaylarından çalışan masalar, soru/yanıt balonları, tıklanabilir ve kopyalanabilir mesajlar, geçmiş/iptal durumları ve azaltılmış hareket desteği; arka planda bitiş/engel/plan onayı bildirimleri ve doğru oturuma geçiş (Tamamlandı; ek CLI çağrısı yok, Gemini risk onayı korunur; masaüstü bildirim sunumu işletim sistemi ayarlarına bağlı)

@@ -3,7 +3,9 @@ const $ = id => document.getElementById(id);
 let lang = 'tr', translations = {}, state = { agents: {}, healthRunning: false };
 let models = [], settings = {}, logs = [], sessions = [], selectedSession = null, displayedSession = null;
 let currentLevel = 'all', currentAgent = 'all', activeTab = 'liveStreamTab', busy = false, contextTarget = null;
-let viewedTurns = [];
+let viewedTurns = [], resumePending = false, pendingApproval = null;
+let roomView = null, inspectedMessage = null, roomCollapsed = false, roomTurnId = null;
+let deferredWorkspace = null;
 let project = { cwd: null, name: null, recentProjects: [] };
 const openActivityIds = new Set();
 const t = key => translations[key] || key;
@@ -16,10 +18,30 @@ function copyButton(text, className = 'copy-row') { const btn = button('⧉', ()
 async function setLanguage(value) {
   translations = await (await fetch(`i18n/${value}.json`)).json(); lang = value; document.documentElement.lang = value;
   document.querySelectorAll('[data-i18n]').forEach(node => { node.textContent = t(node.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(node => node.setAttribute('aria-label', t(node.dataset.i18nAria)));
   document.querySelectorAll('[data-i18n-placeholder]').forEach(node => { node.placeholder = t(node.dataset.i18nPlaceholder); });
   $('langTr').classList.toggle('active', lang === 'tr'); $('langEn').classList.toggle('active', lang === 'en');
   await api.setLanguage(value); renderProject(); renderState(); renderLogs(); renderHistory(); renderTurns(viewedTurns);
+  if (inspectedMessage && !$('roomMessageDetails').hidden) showRoomMessage(inspectedMessage, false);
 }
+function showAgentDetails(id) {
+  $('agentCardsDetails').open = true;
+  const card = $('agent-' + id); if (card) { card.scrollIntoView({ block: 'nearest' }); card.querySelector('summary')?.focus(); }
+}
+function showRoomMessage(message, focus = true) {
+  inspectedMessage = message;
+  $('roomMessageDetails').hidden = false;
+  $('roomMessageTitle').textContent = message.from + ' → ' + message.to + (message.taskTitle ? ' • ' + message.taskTitle : '');
+  $('roomMessageBody').replaceChildren(outputBlock(message.text));
+  if (focus) $('roomMessageDetails').focus({ preventScroll: true });
+}
+function renderRoom() {
+  roomView ||= new TeamRoomView({ scene: $('roomScene'), t, onInspect: showRoomMessage, onDetails: showAgentDetails });
+  const turn = roomTurnId ? viewedTurns.find(item => item.id === roomTurnId) || viewedTurns.at(-1) : viewedTurns.at(-1);
+  roomView.update(TeamRoomModel.project({ agents: state.agents, turn, live: busy && turn === viewedTurns.at(-1), approval: !!pendingApproval }));
+  $('roomBody').hidden = roomCollapsed; $('toggleRoomBtn').textContent = t(roomCollapsed ? 'roomExpand' : 'roomCollapse'); $('toggleRoomBtn').setAttribute('aria-expanded', String(!roomCollapsed));
+}
+function resetRoomSelection() { roomTurnId = null; inspectedMessage = null; $('roomMessageDetails').hidden = true; }
 function renderProject() {
   const name = project.name || t('openProject');
   for (const id of ['projectName', 'sidebarProjectName', 'composerProjectName', 'contextProjectName']) $(id).textContent = name;
@@ -73,6 +95,12 @@ function renderState() {
   $('runAllHealthBtn').disabled = busy || state.healthRunning;
   $('planAndExecuteBtn').disabled = busy || state.healthRunning || !project.cwd;
   $('planAndExecuteBtn').textContent = t(busy ? 'dispatching' : 'dispatchBtn');
+  $('stopBtn').disabled = !busy;
+  for (const id of ['runMode', 'directAgent', 'directLevel', 'timeoutSeconds', 'previewPlan', 'verifyRun']) $(id).disabled = busy;
+  $('previewPlan').disabled ||= $('runMode').value === 'economic';
+  $('verifyRun').disabled ||= $('runMode').value === 'economic';
+  for (const option of $('directAgent').options) { const agent = state.agents[option.value]; option.disabled = !agent?.enabled || ['limited', 'missing', 'unauthenticated', 'error'].includes(agent.status); }
+  if (!busy && $('directAgent').selectedOptions[0]?.disabled) { const ready = [...$('directAgent').options].find(option => !option.disabled); if (ready) $('directAgent').value = ready.value; }
   $('cwdInput').disabled = busy; $('chooseFolderBtn').disabled = busy;
   $('recentProjects').disabled = busy || state.healthRunning;
   for (const id of ['memoryInput', 'saveMemoryBtn', 'resetMemoryBtn']) $(id).disabled = !project.cwd || busy;
@@ -88,7 +116,7 @@ function renderState() {
       detail('authStatus', agent.health?.authInfo?.loggedIn ? t('signedIn') : agent.status === 'unauthenticated' ? t('statusAuth') : t('unknown')),
       detail('lastHealthRes', agent.health ? (agent.health.healthy ? `✓ OK (${((agent.health.durationMs || 0) / 1000).toFixed(1)}s)` : t('errorStatus')) : t('notTested'), `${id}-test-res`));
     const statline = el('div', 'agent-statline'); statline.append(el('span', '', t('jobsCompleted')), el('strong', '', String(agent.jobsCompleted || 0))); card.append(statline);
-    const meter = el('progress'); meter.max = 100; meter.value = Math.min(100, (agent.jobsCompleted || 0) * 15); meter.title = t('usageHint'); card.append(meter);
+    card.append(el('small', 'muted', t('usageHint')));
     const controls = el('div', 'agent-controls');
     const inspector = el('details', 'agent-inspector'); inspector.append(el('summary', '', t('agentDetails')), details, detail('renewal', agent.rateLimitedUntil ? new Date(agent.rateLimitedUntil).toLocaleString(lang) : '—'));
     const test = button(t('testSingle'), () => testHealth(id), 'btn btn-secondary btn-sm'); test.disabled = !agent.enabled || busy || state.healthRunning; test.dataset.agent = id; inspector.append(test); controls.append(inspector); card.append(controls);
@@ -101,6 +129,7 @@ function renderState() {
     }
     grid.append(card);
   }
+  renderRoom();
 }
 function appendLog(value) {
   const entry = LogModel.normalize(value); if (entry.state) { state = entry.state; renderState(); }
@@ -137,7 +166,7 @@ function outputBlock(text) {
 function activityPayload(event, events, turn) {
   const assignment = events.find(item => item.id === event.assignmentId);
   const nextAssignment = event.type === 'agent_switched' ? events.slice(events.indexOf(event) + 1).find(item => item.type === 'task_assigned' && item.step === event.step && item.agent === event.toAgent) : null;
-  const result = events.find(item => item.assignmentId === (nextAssignment?.id || event.assignmentId || event.id) && ['task_completed', 'task_failed', 'task_blocked', 'final_review_completed', 'final_review_failed'].includes(item.type));
+  const result = events.find(item => item.assignmentId === (nextAssignment?.id || event.assignmentId || event.id) && ['task_completed', 'task_failed', 'task_blocked', 'agent_question', 'coordination_completed', 'coordination_failed', 'final_review_completed', 'final_review_failed'].includes(item.type));
   return {
     input: event.input ?? assignment?.input ?? nextAssignment?.input ?? (event.type.startsWith('session_') ? turn.prompt : undefined),
     output: event.output ?? result?.output ?? (event.type === 'session_started' ? turn.result?.finalResult || turn.error : undefined)
@@ -186,22 +215,37 @@ function renderTimeline(turns) {
 }
 function renderTurns(turns) {
   viewedTurns = turns;
+  renderRoom();
   renderTimeline(turns);
   const stream = $('streamContainer'); stream.replaceChildren();
   if (!turns.length) { stream.append(el('div', 'stream-empty', t('emptyStream'))); return; }
   for (const turn of turns) {
     const promptCard = el('div', 'step-card'); promptCard.append(el('strong', '', t('promptLabel')), outputBlock(turn.prompt || '')); stream.append(promptCard);
     if (turn.plan) {
-      const card = el('div', 'step-card'); card.append(el('strong', '', t('coordinatorPlan')), el('p', '', turn.plan.summary || '')); stream.append(card);
+      const card = el('div', 'step-card'); card.append(el('strong', '', t(turn.options?.mode === 'economic' ? 'economic' : 'coordinatorPlan')), el('p', '', turn.plan.summary || '')); stream.append(card);
       for (const task of turn.plan.subtasks || []) {
         const output = (turn.outputs || turn.result?.outputs || []).find(o => o.step === task.step);
         const step = el('div', 'step-card');
         if (output) step.append(el('span', output.success ? 'log-success' : 'log-warning', t('session_' + (output.status || (output.success ? 'completed' : 'failed')))));
         step.append(el('strong', '', `${task.step}. ${task.title} • ${output?.agent || task.agent} • ${output ? output.model || t('defaultModel') : task.model || t('defaultModel')} • ${t(output && Object.hasOwn(output, 'level') ? output.level || 'defaultModel' : task.level || 'orta')}`), el('p', '', `${t('reason')}: ${output?.rationale || task.rationale || ''}`), outputBlock(output?.output || t('waitingTask')));
+        if (output) { step.append(el('p', 'muted', `${t('reportedResult')}: ${t('session_' + (output.success ? 'completed' : output.status || 'failed'))} • ${t('verifiedResult')}: ${t('notVerified')}`));
+          if (output.evidence) step.append(el('strong', '', t('fileReferences')), outputBlock((output.evidence.fileReferences || []).join('\n') || t('noneObserved')), el('strong', '', t('executedChecks')), outputBlock((output.evidence.executedChecks || []).map(c => `${c.command} → ${c.exitCode}`).join('\n') || t('noneObserved')), el('p', 'muted', t('checkLimits'))); }
         stream.append(step);
       }
     }
-    if (turn.result?.finalResult) { const card = el('div', 'step-card'); card.append(el('strong', '', t('finalResult')), outputBlock(turn.result.finalResult)); stream.append(card); }
+    const conversation = (turn.activities || []).filter(event => ['agent_question', 'coordinator_reply', 'coordinator_decision', 'coordination_stopped'].includes(event.type));
+    if (conversation.length) {
+      const card = el('section', 'step-card team-conversation'); card.append(el('h3', '', t('teamConversation')));
+      for (const event of conversation) {
+        const row = el('div', 'team-message'); row.append(el('strong', '', ActivityModel.format(event, t)), outputBlock(event.type === 'coordinator_decision' ? event.reason || '' : event.output || t('activity_cause_' + event.cause))); card.append(row);
+      }
+      stream.append(card);
+    }
+    if (turn.status) stream.append(el('p', 'muted', t('session_' + turn.status)));
+    if (turn.stream?.length) { const raw = el('details', 'step-card'); raw.open = busy && turn === turns.at(-1); raw.append(el('summary', '', t('liveOutput'))); raw.append(outputBlock(turn.stream.map(c => `[${c.agent} ${c.stream}] ${c.text}`).join(''))); stream.append(raw); }
+    if (turn.evidence) { const card = el('div', 'step-card'); card.append(el('strong', '', t('observedChanges')), outputBlock(turn.evidence.changedFiles.join('\n') || t('noneObserved')), el('p', 'muted', t('evidenceLimits'))); stream.append(card); }
+    if (turn.result?.verification && turn.result.verification.status !== 'not_requested') { const card = el('div', 'step-card'); card.append(el('strong', '', t('verification') + (turn.result.verification.status === 'failed' ? ' • ' + t('session_failed') : '')), outputBlock(turn.result.verification.output || t('notVerified')), outputBlock((turn.result.verification.evidence?.executedChecks || []).map(c => `${c.command} → ${c.exitCode}`).join('\n') || t('noneObserved'))); stream.append(card); }
+    if (turn.result?.finalResult) { const card = el('div', 'step-card'); card.append(el('strong', '', t(turn.options?.mode === 'economic' ? 'directResult' : 'finalResult')), outputBlock(turn.result.finalResult)); stream.append(card); }
     if (turn.error) { const card = el('div', 'step-card log-error'); card.append(outputBlock(turn.error)); stream.append(card); }
   }
 }
@@ -231,12 +275,14 @@ async function loadMemory() {
 }
 async function openSession(id, resume = false) {
   if (busy) return;
-  const session = await api.openSession(id); displayedSession = id; selectedSession = resume ? id : null;
+  resetRoomSelection();
+  const session = await api.openSession(id); resumePending = resume && !!session.turns.at(-1)?.plan && !['completed'].includes(session.turns.at(-1)?.status);
+  if (resumePending) { $('promptInput').value = session.turns.at(-1).prompt; const options = session.turns.at(-1).options; if (options) applyRunOptions(options); } displayedSession = id; selectedSession = resume ? id : null;
   if (session.cwd !== project.cwd) { project = await api.openWorkspace(session.cwd); renderProject(); }
   renderTurns(session.turns); logs = session.turns.flatMap(turn => turn.logs || []); renderLogs(); renderHistory(); await loadMemory();
-  if (resume) { $('promptInput').focus(); notice(t('resumeHint')); }
+  if (resume) { $('promptInput').focus(); notice(t(resumePending ? 'resumeIncompleteHint' : 'resumeHint')); }
 }
-function newSession() { if (busy) return; selectedSession = displayedSession = null; logs = []; renderTurns([]); renderLogs(); renderHistory(); $('promptInput').value = ''; }
+function newSession() { if (busy) return; resetRoomSelection(); resumePending = false; selectedSession = displayedSession = null; logs = []; renderTurns([]); renderLogs(); renderHistory(); $('promptInput').value = ''; }
 async function testHealth(id) {
   if (busy || state.healthRunning) return;
   try { state = await api.runHealthCheck(id); }
@@ -246,15 +292,19 @@ async function testHealth(id) {
 async function runSession() {
   if (busy || state.healthRunning || !project.cwd) return;
   const prompt = $('promptInput').value.trim(); if (!prompt) { notice(t('enterPrompt')); return; }
-  busy = true; renderState(); renderHistory(); $('newSessionBtn').disabled = true;
-  const live = { prompt, startedAt: new Date().toISOString(), outputs: [], activities: [] }; viewedTurns = selectedSession ? [...viewedTurns, live] : [live]; logs = selectedSession ? logs : []; renderTurns(viewedTurns); renderLogs();
+  resetRoomSelection(); busy = true; renderState(); renderHistory(); $('newSessionBtn').disabled = true;
+  const live = { prompt, options: readRunOptions(), startedAt: new Date().toISOString(), outputs: [], activities: [] }; viewedTurns = selectedSession ? [...viewedTurns, live] : [live]; logs = selectedSession ? logs : []; renderTurns(viewedTurns); renderLogs();
   try {
-    const result = await api.runSession({ prompt, sessionId: selectedSession });
+    const options = readRunOptions();
+    await api.saveSettings(options);
+    const result = await api.runSession({ prompt, sessionId: selectedSession, resume: resumePending, options });
+    resumePending = false;
     displayedSession = result.session.id; selectedSession = result.saved ? result.session.id : null;
     renderTurns(result.session.turns); logs = result.session.turns.flatMap(turn => turn.logs || []); renderLogs();
-    notice(t(result.saved ? 'sessionSaved' : 'sessionNotSaved')); await loadMemory();
+    notice(t('session_' + result.session.status) + ' • ' + t(result.saved ? 'sessionSaved' : 'sessionNotSaved'));
+    if (result.session.status === 'failed' && !live.plan) { $('runMode').value = 'economic'; notice(t('directHint')); } await loadMemory();
   } catch (error) { appendLog({ level: 'error', text: error.message, errorType: 'other', raw: error.message }); }
-  finally { busy = false; $('newSessionBtn').disabled = false; try { state = await api.getState(); await refreshHistory(); } finally { renderState(); } }
+  finally { if ($('planDialog').open) $('planDialog').close(); pendingApproval = null; try { state = await api.getState(); await refreshHistory(); } finally { busy = false; $('newSessionBtn').disabled = false; renderState(); if (deferredWorkspace) { const next = deferredWorkspace; deferredWorkspace = null; receiveWorkspace(next); } } }
 }
 function selectRegion(region) { const selection = window.getSelection(); selection.removeAllRanges(); const range = document.createRange(); range.selectNodeContents(region); selection.addRange(range); }
 function contentText(region) { return [...region.querySelectorAll('.output-text, .log-text, .raw-output')].map(node => node.textContent).join('\n'); }
@@ -262,18 +312,58 @@ document.querySelectorAll('.selectable').forEach(region => {
   region.addEventListener('contextmenu', event => { event.preventDefault(); contextTarget = region; perform(() => api.textMenu({ selection: window.getSelection().toString(), all: contentText(region) })); });
   region.addEventListener('keydown', event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); selectRegion(region); } });
 });
+function readRunOptions() { return { mode: $('runMode').value, agent: $('directAgent').value, level: $('directLevel').value, timeout: Number($('timeoutSeconds').value) * 1000, previewPlan: $('previewPlan').checked, verify: $('verifyRun').checked }; }
+function applyRunOptions(options) { $('runMode').value = options.mode || 'coordinated'; $('directAgent').value = options.agent || 'codex'; $('directLevel').value = options.level || 'hafif'; $('timeoutSeconds').value = (options.timeout || 180000) / 1000; $('previewPlan').checked = !!options.previewPlan; $('verifyRun').checked = !!options.verify; }
+api.onStream(chunk => { if (!busy || !viewedTurns.length) return; const turn = viewedTurns.at(-1); turn.stream ||= []; const old = chunk.snapshot ? turn.stream.findIndex(item => item.streamId === chunk.streamId && item.stream === chunk.stream) : -1; if (old >= 0) turn.stream[old] = chunk; else turn.stream.push(chunk); renderTurns(viewedTurns); });
+api.onApproval(({ runId, plan }) => {
+  pendingApproval = { runId, plan }; renderRoom(); $('planEditor').replaceChildren(); $('planError').textContent = '';
+  for (const task of plan.subtasks) {
+    const row = el('div', 'step-card'); row.dataset.step = task.step;
+    const title = el('input'); title.value = task.title; title.className = 'plan-title'; title.setAttribute('aria-label', t('taskTitle'));
+    const prompt = el('textarea'); prompt.value = task.prompt; prompt.className = 'plan-prompt'; prompt.setAttribute('aria-label', t('promptLabel'));
+    const reason = el('input'); reason.value = task.rationale || ''; reason.className = 'plan-reason'; reason.setAttribute('aria-label', t('reason'));
+    const agent = $('directAgent').cloneNode(true); agent.removeAttribute('id'); agent.disabled = false; agent.className = 'plan-agent'; agent.value = task.agent;
+    const level = $('directLevel').cloneNode(true); level.removeAttribute('id'); level.disabled = false; level.className = 'plan-level'; level.value = task.level;
+    row.append(title, agent, level, reason, prompt, button(t('delete'), () => row.remove())); $('planEditor').append(row);
+  }
+  $('planDialog').showModal();
+});
+$('approvePlanBtn').addEventListener('click', async () => {
+  if (!pendingApproval) return;
+  const { runId, plan } = pendingApproval;
+  const subtasks = [...$('planEditor').children].map(row => ({ ...plan.subtasks.find(task => task.step === Number(row.dataset.step)), title: row.querySelector('.plan-title').value, prompt: row.querySelector('.plan-prompt').value, rationale: row.querySelector('.plan-reason').value, agent: row.querySelector('.plan-agent').value, level: row.querySelector('.plan-level').value }));
+  try { await api.approvePlan({ runId, plan: { ...plan, subtasks } }); if (pendingApproval?.runId === runId) { pendingApproval = null; $('planDialog').close(); } renderRoom(); }
+  catch (error) { $('planError').textContent = error.message; }
+});
+async function stopSession() { await api.cancelSession(); pendingApproval = null; renderRoom(); if ($('planDialog').open) $('planDialog').close(); }
+$('stopBtn').addEventListener('click', () => perform(stopSession)); $('cancelPlanBtn').addEventListener('click', () => perform(stopSession));
+$('planDialog').addEventListener('cancel', event => { event.preventDefault(); perform(stopSession); });
+$('runMode').addEventListener('change', renderState);
+function receiveWorkspace(value) { if (busy) { deferredWorkspace = value; return; } project = value; newSession(); renderProject(); renderState(); perform(async () => { await refreshHistory(); await loadMemory(); }); }
+api.onWorkspace(receiveWorkspace);
 api.onSelectAll(() => { if (contextTarget) selectRegion(contextTarget); });
 api.onState(value => { state = value; renderState(); });
 api.onLog(appendLog);
 api.onPlan(({ plan }) => { if (busy) { viewedTurns.at(-1).plan = plan; renderTurns(viewedTurns); } });
-api.onOutput(({ output }) => { if (busy) { viewedTurns.at(-1).outputs.push(output); renderTurns(viewedTurns); } });
+api.onOutput(({ output }) => { if (busy) { const outputs = viewedTurns.at(-1).outputs; const old = outputs.findIndex(item => item.step === output.step); if (old >= 0) outputs.splice(old, 1); outputs.push(output); renderTurns(viewedTurns); } });
 api.onActivity(({ turnId, activity }) => {
   const turn = viewedTurns.at(-1);
   if (!busy || !turn || turn.id && turn.id !== turnId) return;
   turn.id = turnId; turn.activities ||= [];
   if (!turn.activities.some(item => item.id === activity.id)) turn.activities.push(activity);
-  renderTimeline(viewedTurns);
+  if (['agent_question', 'coordinator_reply', 'coordinator_decision', 'coordination_stopped'].includes(activity.type)) renderTurns(viewedTurns); else renderTimeline(viewedTurns);
+  renderRoom();
 });
+api.onSessionFocus(target => perform(async () => {
+  if (busy) {
+    if (viewedTurns.at(-1)?.id !== target.turnId) { notice(t('roomOtherSession')); return; }
+  } else { await openSession(target.sessionId); roomTurnId = target.turnId; renderRoom(); }
+  roomCollapsed = false; renderRoom();
+  if (target.kind === 'approval' && $('planDialog').open) $('approvePlanBtn').focus();
+  else { $('teamRoom').scrollIntoView({ block: 'center' }); $('toggleRoomBtn').focus({ preventScroll: true }); }
+}));
+$('toggleRoomBtn').addEventListener('click', () => { roomCollapsed = !roomCollapsed; renderRoom(); });
+$('closeRoomMessageBtn').addEventListener('click', () => { inspectedMessage = null; $('roomMessageDetails').hidden = true; $('roomLatestMessage').focus(); });
 $('runAllHealthBtn').addEventListener('click', () => perform(() => testHealth()));
 $('planAndExecuteBtn').addEventListener('click', () => perform(runSession));
 $('newSessionBtn').addEventListener('click', newSession);
@@ -289,14 +379,15 @@ $('copyAllBtn').addEventListener('click', () => perform(() => copy(activeTab ===
 $('levelFilters').querySelectorAll('[data-level]').forEach(btn => btn.addEventListener('click', () => { currentLevel = btn.dataset.level; $('levelFilters').querySelectorAll('[data-level]').forEach(node => node.classList.toggle('active', node === btn)); renderLogs(); }));
 $('agentFilter').addEventListener('change', () => { currentAgent = $('agentFilter').value; renderLogs(); });
 document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => { activeTab = btn.dataset.tab; document.querySelectorAll('.tab-btn').forEach(node => node.classList.toggle('active', node === btn)); document.querySelectorAll('.tab-content').forEach(node => node.classList.toggle('active', node.id === activeTab)); }));
-$('settingsBtn').addEventListener('click', () => perform(async () => { settings = await api.getSettings(); $('saveHistoryInput').checked = settings.saveHistory; $('modelsInput').value = JSON.stringify(models, null, 2); $('settingsDialog').showModal(); }));
+$('settingsBtn').addEventListener('click', () => perform(async () => { settings = await api.getSettings(); $('saveHistoryInput').checked = settings.saveHistory; $('notificationsInput').checked = settings.notificationsEnabled !== false; $('notificationsInput').disabled = busy; $('modelsInput').value = JSON.stringify(models, null, 2); $('settingsDialog').showModal(); }));
 $('closeSettingsBtn').addEventListener('click', () => $('settingsDialog').close());
 $('saveHistoryInput').addEventListener('change', () => perform(async () => { settings = await api.saveSettings({ saveHistory: $('saveHistoryInput').checked }); }));
+$('notificationsInput').addEventListener('change', () => perform(async () => { settings = await api.saveSettings({ notificationsEnabled: $('notificationsInput').checked }); }));
 $('clearHistoryBtn').addEventListener('click', () => perform(async () => { if (!confirm(t('clearHistoryConfirm'))) return; await api.clearHistory(); newSession(); await refreshHistory(); await loadMemory(); }));
 $('saveModelsBtn').addEventListener('click', () => perform(async () => { const list = JSON.parse($('modelsInput').value); if (!await api.saveModels(list)) throw new Error(t('operationFailed')); models = await api.getModels(); renderState(); notice(t('modelsSaved')); }));
 window.addEventListener('DOMContentLoaded', () => perform(async () => {
   [state, models, settings, project] = await Promise.all([api.getState(), api.getModels(), api.getSettings(), api.getWorkspace()]);
-  await setLanguage('tr'); await refreshHistory(); await loadMemory();
+  applyRunOptions(settings); await setLanguage('tr'); await refreshHistory(); await loadMemory();
   if (project.error) notice(t('projectUnavailable') + ' ' + project.error);
 }));
 document.addEventListener('keydown', event => {

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'">
-  <title>Quotalala</title><link rel="stylesheet" href="style.css">
+  <title>Quotalala</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="team-room.css">
 </head>
 <body>
   <div class="workspace">
@@ -26,13 +26,28 @@
           <section class="workspace-intro"><div class="eyebrow" data-i18n="workTogether"></div><h1 data-i18n="workspaceTitle"></h1><p data-i18n="workspaceSubtitle"></p></section>
           <section class="agents-section">
             <div class="section-header"><h2 data-i18n="yourAgents"></h2><button id="runAllHealthBtn" class="btn-ghost" data-i18n="runAllHealth"></button></div>
-            <div id="agentsGrid" class="agents-grid"></div>
+            <section id="teamRoom" class="team-room" aria-labelledby="roomTitle">
+              <div class="room-heading"><div><span class="room-eyebrow" data-i18n="roomEyebrow"></span><h2 id="roomTitle" data-i18n="roomTitle"></h2></div><div class="room-heading-actions"><span id="roomStatus" role="status" aria-live="polite"></span><button id="toggleRoomBtn" class="btn-ghost" aria-expanded="true" aria-controls="roomBody" data-i18n="roomCollapse"></button></div></div>
+              <div id="roomBody"><div id="roomScene" class="office-scene" role="group" data-i18n-aria="roomSceneLabel"></div>
+              <div id="roomDelivery" class="room-delivery"><span class="delivery-dot" aria-hidden="true"></span><button id="roomLatestMessage" class="btn-ghost" disabled><span id="roomRouteText" data-i18n="roomNoMessages"></span><span aria-hidden="true">↗</span></button><small data-i18n="roomLocal"></small></div>
+              <section id="roomMessageDetails" class="room-message-details selectable" tabindex="0" hidden><div class="section-header"><strong id="roomMessageTitle"></strong><button id="closeRoomMessageBtn" class="btn-ghost" data-i18n="close"></button></div><div id="roomMessageBody"></div></section></div>
+            </section>
+            <details id="agentCardsDetails" class="agent-cards-details"><summary data-i18n="roomConnectionDetails"></summary><div id="agentsGrid" class="agents-grid"></div></details>
           </section>
           <section class="prompt-section">
             <div class="prompt-box-card">
               <div class="composer-heading"><label for="promptInput" data-i18n="promptLabel"></label><span id="sessionLabel" class="session-label"></span></div>
               <textarea id="promptInput" rows="4" data-i18n-placeholder="promptPlaceholder"></textarea>
+              <div class="run-controls">
+                <label><span data-i18n="runMode"></span><select id="runMode"><option value="coordinated" data-i18n="coordinated"></option><option value="economic" data-i18n="economic"></option></select></label>
+                <label><span data-i18n="agent"></span><select id="directAgent"><option value="codex">Codex</option><option value="claude">Claude</option><option value="gemini">Gemini</option></select></label>
+                <label><span data-i18n="level"></span><select id="directLevel"><option value="hafif" data-i18n="hafif"></option><option value="orta" data-i18n="orta"></option><option value="güçlü" data-i18n="güçlü"></option></select></label>
+                <label><span data-i18n="timeoutSeconds"></span><input id="timeoutSeconds" type="number" min="1" max="1800" value="180"></label>
+                <label><input id="previewPlan" type="checkbox"><span data-i18n="previewPlan"></span></label>
+                <label><input id="verifyRun" type="checkbox"><span data-i18n="verifyRun"></span></label>
+              </div><p id="directHint" class="muted" data-i18n="directHint"></p>
               <div class="composer-footer"><span class="composer-context"><span class="folder-mark">▱</span><span id="composerProjectName"></span><span class="context-separator">·</span><span data-i18n="memoryIncluded"></span></span><button id="planAndExecuteBtn" class="btn btn-accent" data-i18n="dispatchBtn"></button></div>
+              <button id="stopBtn" class="btn btn-secondary" data-i18n="stop" disabled></button>
               <input id="cwdInput" type="hidden">
             </div>
             <p id="projectPath" class="project-path"></p>
@@ -61,7 +76,8 @@
       <div id="notice" role="status" aria-live="polite"></div>
     </main>
   </div>
-  <dialog id="settingsDialog"><div class="section-header"><h2 data-i18n="settings"></h2><button id="closeSettingsBtn" class="btn-ghost" data-i18n="close"></button></div><label class="setting-toggle"><input type="checkbox" id="saveHistoryInput"><span data-i18n="saveHistory"></span></label><p data-i18n="privacyHint"></p><button id="clearHistoryBtn" class="btn btn-secondary" data-i18n="clearHistory"></button><details><summary data-i18n="modelSettings"></summary><p data-i18n="modelHint"></p><div class="input-group"><textarea id="modelsInput" rows="12"></textarea></div><button id="saveModelsBtn" class="btn btn-secondary" data-i18n="saveModels"></button></details></dialog>
-  <script src="log-model.js"></script><script src="../shared/activity.js"></script><script src="app.js"></script>
+  <dialog id="settingsDialog"><div class="section-header"><h2 data-i18n="settings"></h2><button id="closeSettingsBtn" class="btn-ghost" data-i18n="close"></button></div><label class="setting-toggle"><input type="checkbox" id="saveHistoryInput"><span data-i18n="saveHistory"></span></label><label class="setting-toggle"><input type="checkbox" id="notificationsInput"><span data-i18n="taskNotifications"></span></label><p data-i18n="taskNotificationsHint"></p><p data-i18n="privacyHint"></p><button id="clearHistoryBtn" class="btn btn-secondary" data-i18n="clearHistory"></button><details><summary data-i18n="modelSettings"></summary><p data-i18n="modelHint"></p><div class="input-group"><textarea id="modelsInput" rows="12"></textarea></div><button id="saveModelsBtn" class="btn btn-secondary" data-i18n="saveModels"></button></details></dialog>
+  <dialog id="planDialog"><h2 data-i18n="previewPlan"></h2><p data-i18n="editPlanHint"></p><div id="planEditor"></div><p id="planError" role="alert"></p><button id="approvePlanBtn" class="btn btn-accent" data-i18n="approvePlan"></button><button id="cancelPlanBtn" class="btn btn-secondary" data-i18n="stop"></button></dialog>
+  <script src="log-model.js"></script><script src="../shared/activity.js"></script><script src="../shared/team-room.js"></script><script src="team-room-view.js"></script><script src="app.js"></script>
 </body>
 </html>

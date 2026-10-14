@@ -10,9 +10,10 @@ app.setPath('sessionData', path.join(root, 'session'));
 process.env.QUOTALALA_DATA_DIR = root;
 const { HistoryStore } = require('../src/main/storage');
 const store = new HistoryStore(root), fixture = store.create(process.cwd(), 'OK');
+store.saveSettings({ notificationsEnabled: false });
 fixture.status = 'completed'; fixture.turns = [{ prompt: 'OK', outputs: [], result: { finalResult: 'OK' } }]; store.save(fixture); store.saveMemory(process.cwd(), 'Fixture project memory');
 app.on('browser-window-created', (event, win) => { win.hide(); win.webContents.setBackgroundThrottling(false); });
-require('../src/main/main');
+require(path.join(process.env.QUOTALALA_TEST_APP_DIR || path.resolve(__dirname, '..'), 'src/main/main.js'));
 async function until(win, expression) {
   for (let i = 0; i < 100; i++) {
     if (await win.webContents.executeJavaScript(expression)) return;

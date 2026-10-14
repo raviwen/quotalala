@@ -18,3 +18,11 @@
 .composer-heading label{font-size:12px}.composer-context{font-size:10px}.session-label{font-size:10px}.project-path{font-size:10px}.tab-btn{font-size:11px}.tab-actions .btn-ghost{font-size:10px}.output-block{font-size:12px}.step-card>p{font-size:12px}
 .context-header h2{font-size:12px}.context-project p,.memory-hint,.context-note p{font-size:11px}.context-project>span{font-size:10px}.context-project strong{font-size:15px}#memoryDetails>summary{font-size:12px}.input-group textarea{font-size:12px}.privacy-note p{font-size:10px}.timeline-event{font-size:11px}.timeline-time{font-size:10px}
 @media(max-width:1250px){.tab-btn{font-size:10px}.tab-actions .btn-ghost{font-size:9px}.composer-context{font-size:9px}}
+
+.run-controls { display:flex; flex-wrap:wrap; gap:12px; margin:12px 0; align-items:center; }
+.run-controls label { display:flex; gap:6px; align-items:center; font-size:12px; color:var(--text-secondary); }
+.run-controls input[type=number] { width:75px; }
+.run-controls select, .run-controls input, #planEditor select { background:#141c2c; color:#e2e8f0; border:1px solid #34415a; border-radius:6px; padding:6px; }
+#planDialog { width:min(850px,90vw); max-height:85vh; overflow:auto; }
+#planEditor textarea { width:100%; min-height:100px; }
+.live-raw { white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; }

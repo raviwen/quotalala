@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, clipboard, dialog } = require('electron');
+if (!app.requestSingleInstanceLock({ argv: process.argv, cwd: process.cwd() })) { app.quit(); } else {
 const path = require('path');
 const fs = require('fs');
 const { getAllAgents } = require('./agents');
@@ -9,18 +10,43 @@ const { HistoryStore } = require('./storage');
 const { HealthService } = require('./health');
 const { SessionRunner } = require('./session-runner');
 const { failure } = require('./events');
-const { WorkspaceManager } = require('./workspace');
+const { TaskNotifications, showNotification } = require('./task-notifications');
+const { launchProject, WorkspaceManager } = require('./workspace');
 const store = new HistoryStore();
 const workspace = new WorkspaceManager();
-let mainWindow, tray, reminderTimer;
+let mainWindow, tray, reminderTimer, taskNotifications;
+let pendingProject = null;
+function flushProject() {
+  if (!pendingProject || runner.busy || health.running) return;
+  const cwd = pendingProject; pendingProject = null;
+  try { emit('workspace:changed', workspace.open(cwd)); } catch (error) { emit('stream:log', failure(null, error.message)); }
+}
+app.on('second-instance', (event, argv, workingDirectory, request) => {
+  // Chromium may reorder switches in commandLine; additionalData preserves argv adjacency.
+  if (Array.isArray(request?.argv) && request.argv.every(item => typeof item === 'string')) argv = request.argv;
+  if (typeof request?.cwd === 'string') workingDirectory = request.cwd;
+  mainWindow?.show(); mainWindow?.focus();
+  try { pendingProject = launchProject(argv, { packaged: app.isPackaged, cwd: workingDirectory }); flushProject(); }
+  catch (error) { emit('stream:log', failure(null, error.message)); }
+});
 let isQuitting = false;
 let language = 'tr';
 const iconPath = path.join(__dirname, '../../assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
-function emit(channel, payload) { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload); }
+function emit(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+  taskNotifications?.consume(channel, payload);
+}
 const health = new HealthService({ agents: getAllAgents(), quota, models, emit });
 const runner = new SessionRunner({ store, coordinator, emit, publish: () => { health.publish(); updateTray(); } });
 function updateTray() { tray?.setToolTip(quota.getTraySummary()); }
-function notify(title, body) { if (Notification.isSupported()) new Notification({ title, body, icon: iconPath }).show(); }
+function notify(title, body, click = () => { mainWindow?.show(); mainWindow?.focus(); }) {
+  try { return showNotification(Notification, { title, body, icon: iconPath, click }); } catch { return false; }
+}
+taskNotifications = new TaskNotifications({
+  send: notify, getSettings: () => store.getSettings(), getLanguage: () => language,
+  isForeground: () => !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused(),
+  focus: target => { mainWindow?.show(); mainWindow?.focus(); emit('session:focus', target); }
+});
 function createWindow() {
   mainWindow = new BrowserWindow({ width: 1420, height: 950, minWidth: 1000, minHeight: 700, backgroundColor: '#0b0f19', icon: iconPath,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
@@ -52,7 +78,7 @@ function register(channel, handler) {
 register('state:get', () => health.snapshot());
 register('health:run', async id => {
   ensureIdle(); if (id && !['claude', 'codex', 'gemini'].includes(id)) throw new Error('Unknown agent.');
-  try { return await health.run(id); } finally { updateTray(); }
+  try { return await health.run(id); } finally { updateTray(); flushProject(); }
 });
 register('settings:get', () => store.getSettings());
 register('settings:save', changes => {
@@ -61,7 +87,9 @@ register('settings:save', changes => {
 });
 register('models:get', () => models.getModels());
 register('models:save', list => { ensureIdle(); return models.saveModels(list); });
-register('session:run', data => { ensureIdle(); return runner.run({ ...data, cwd: workspace.requireProject() }); });
+register('session:run', async data => { ensureIdle(); try { return await runner.run({ ...data, cwd: workspace.requireProject() }); } finally { setImmediate(flushProject); } });
+register('session:cancel', () => runner.cancel());
+register('session:approve', data => runner.approvePlan(data));
 register('sessions:list', () => workspace.get().cwd ? store.list(workspace.get().cwd) : []);
 register('sessions:open', id => store.open(id));
 register('sessions:rename', ({ id, title }) => { ensureIdle(); return store.rename(id, title); });
@@ -94,6 +122,8 @@ register('text:menu', ({ selection, all }) => {
 });
 register('language:set', value => { language = value === 'en' ? 'en' : 'tr'; if (tray) { tray.destroy(); createTray(); } });
 app.whenReady().then(() => {
+  if (process.platform === 'win32') app.setAppUserModelId('com.quotalala.app');
+  store.recoverInterrupted();
   workspace.initialize(process.argv, { packaged: app.isPackaged, cwd: process.cwd() });
   quota.setEnabled('gemini', store.getSettings().geminiEnabled);
   createWindow(); createTray();
@@ -111,5 +141,7 @@ app.whenReady().then(() => {
   }, 60000);
   app.on('activate', () => { if (!mainWindow) createWindow(); else mainWindow.show(); });
 });
-app.on('before-quit', () => { isQuitting = true; clearInterval(reminderTimer); });
+app.on('before-quit', () => { isQuitting = true; clearInterval(reminderTimer); runner.cancel(); });
 app.on('window-all-closed', () => { if (isQuitting) app.quit(); });
+
+}

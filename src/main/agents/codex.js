@@ -28,6 +28,7 @@ class CodexAgent extends BaseAgent {
     if (!options.healthTest) {
       const messages = [];
       res.toolFailures = [];
+      res.executedChecks = [];
       res.successfulFileCommands = 0;
       res.toolChecksAvailable = true;
       for (const line of res.stdout.split(/\r?\n/)) {
@@ -37,6 +38,7 @@ class CodexAgent extends BaseAgent {
           if (event.type === 'item.completed' && event.item?.type === 'agent_message') messages.push(event.item.text);
           if (event.type === 'item.completed' && event.item?.type === 'command_execution') {
             const item = event.item, output = item.aggregated_output || item.output || '';
+            if (typeof item.exit_code === 'number') res.executedChecks.push({ command: item.command, exitCode: item.exit_code });
             if (typeof item.exit_code === 'number' && item.exit_code !== 0 || item.status === 'failed' || policyPattern.test(output)) res.toolFailures.push({ command: item.command, output, exitCode: item.exit_code, policyBlocked: policyPattern.test(output) });
             else if ((item.exit_code === 0 || item.status === 'completed') && /rg|Get-Content|Get-ChildItem|\bcat\b|\bls\b|read.*file/i.test(item.command || '')) res.successfulFileCommands++;
           }
