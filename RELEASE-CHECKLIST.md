@@ -1,6 +1,6 @@
 # Release readiness
 
-Last local verification: 2026-10-15. Release target: **1.1.0**. Registry publication is a separate explicit step; verify the npm version and archive integrity after publishing.
+Last local verification: 2026-10-15. **1.1.0 was published to npm on 2026-10-15** with maintainer authorization and browser verification. The public version and `latest` tag are both 1.1.0.
 
 ## Verified for 1.1.0
 
@@ -24,7 +24,11 @@ The [sprintf-js advisory](https://github.com/advisories/GHSA-hp3w-g68c-fv3c) con
 
 `.github/workflows/checks.yml` runs source checks, offline tests, mocked interface/startup checks and runtime auditing on Windows. A manual run also builds and verifies an unsigned installer and retains a seven-day Actions artifact without publishing a Release.
 
-The run for `59c28e1` failed because the hosted Windows machine defaulted to reduced motion while the animation test assumed animations were enabled. The test now explicitly selects both `no-preference` and `reduce`; local verification passes. The next pushed revision must complete its remote checks before publication.
+The run for `59c28e1` failed because the hosted Windows machine defaulted to reduced motion while the animation test assumed animations were enabled. The test now explicitly selects both `no-preference` and `reduce`; local verification passes. [The 1.1.0 run for `0365b8a`](https://github.com/raviwen/quotalala/actions/runs/38714188566) completed successfully before publication.
+
+## Verified npm publication
+
+[npm quotalala 1.1.0](https://www.npmjs.com/package/quotalala/v/1.1.0) contains 54 files. Registry metadata confirms the launcher mapping and pinned Electron runtime. Its SHA-512 integrity matches the exact locally tested archive; SHA-1 is `0393c76dbc193efae7d7c4fa7f46b1bd3ef6176a`. The registry initially returned 404 while processing the accepted upload; publication was confirmed only after the public version appeared. This record was updated after publication; the published archive retains its pre-publication checklist.
 
 ## npm release procedure
 
