@@ -54,6 +54,10 @@ if (!peer) app.whenReady().then(async () => {
       throw new Error('Condition timed out: ' + expression);
     };
     await new Promise(resolve => win.webContents.once('did-finish-load', resolve));
+    // Hosted Windows runners may disable animations by default. Exercise both
+    // explicit user preferences instead of depending on the machine setting.
+    win.webContents.debugger.attach('1.3');
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
     await until("document.querySelector('.history-open') !== null");
     assert.match(await js("document.getElementById('historyList').textContent"), /Beklenmedik kapanma/);
     await js("document.getElementById('promptInput').value='Mock task'; document.getElementById('planAndExecuteBtn').click()");
@@ -76,7 +80,6 @@ if (!peer) app.whenReady().then(async () => {
     win.webContents.send('session:focus', { sessionId: 'another-session', turnId: 'another-turn', kind: 'completed' });
     await until("document.getElementById('notice').textContent.includes('başka bir oturuma')");
     assert.equal((await js('api.getWorkspace()')).cwd, fs.realpathSync(b));
-    win.webContents.debugger.attach('1.3');
     await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     assert.equal(await js("getComputedStyle(document.querySelector('#room-codex .person-head')).animationName"), 'none');
     await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });

@@ -21,15 +21,18 @@ for (const file of appFiles) {
   copy(file, path.join(stage, 'app', file));
 }
 copy('bin/quotalala.js', path.join(stage, 'bin/quotalala.js'));
-const documents = ['LICENSE', 'README.md', 'README.tr.md', 'README.de.md', 'README.es.md', 'README.fr.md', 'AGENTS.md', 'RELEASE-CHECKLIST.md'];
+const documents = ['LICENSE', 'README.md', 'README.tr.md', 'README.de.md', 'README.es.md', 'README.fr.md', 'AGENTS.md', 'RELEASE-CHECKLIST.md', 'CHANGELOG.md'];
 for (const file of documents) copy(file, path.join(stage, file));
 copy('assets/icon.png', path.join(stage, 'assets/icon.png'));
+const screenshots = files.filter(file => /^assets\/screenshots\/[a-z-]+\.png$/.test(file));
+assert.equal(screenshots.length, 3, 'All three README screenshots must ship');
+for (const file of screenshots) copy(file, path.join(stage, file));
 fs.writeFileSync(path.join(stage, 'app/package.json'), JSON.stringify({ name: source.name, version: source.version, main: source.main, productName: 'Quotalala', license: source.license }, null, 2));
 const manifest = {
   name: 'quotalala', version: source.version, description: source.description,
   bin: { quotalala: 'bin/quotalala.js' }, license: source.license, author: source.author,
   repository: { type: 'git', url: 'git+https://github.com/raviwen/quotalala.git' },
-  engines: source.engines, os: ['win32'], files: ['bin/', 'app/', 'assets/icon.png', 'LICENSE', 'README*.md', 'AGENTS.md', 'RELEASE-CHECKLIST.md'],
+  engines: source.engines, os: ['win32'], files: ['bin/', 'app/', 'assets/', 'LICENSE', 'README*.md', 'AGENTS.md', 'RELEASE-CHECKLIST.md', 'CHANGELOG.md'],
   dependencies: { electron: source.devDependencies.electron }
 };
 fs.writeFileSync(path.join(stage, 'package.json'), JSON.stringify(manifest, null, 2));
@@ -40,7 +43,7 @@ const report = JSON.parse(execFileSync(process.execPath, [process.env.npm_execpa
 // npm versions emit either an array or a record keyed by package name.
 const packed = Array.isArray(report) ? report[0] : report.quotalala;
 assert.ok(packed?.files && packed.filename, 'npm did not return a package inventory');
-const expected = ['package.json', 'app/package.json', 'bin/quotalala.js', 'assets/icon.png', ...documents, ...appFiles.map(file => 'app/' + file)].sort();
+const expected = ['package.json', 'app/package.json', 'bin/quotalala.js', 'assets/icon.png', ...screenshots, ...documents, ...appFiles.map(file => 'app/' + file)].sort();
 assert.deepEqual(packed.files.map(file => file.path).sort(), expected, 'npm archive must contain exactly the approved application files');
 fs.writeFileSync(path.join(output, 'receipt.json'), JSON.stringify({ stage, archive: path.join(output, packed.filename) }, null, 2));
 console.log(`PASS: ${packed.files.length} npm package files; no build tools, tests or user data.\nPackage: ${path.join(output, packed.filename)}\nStage: ${stage}`);

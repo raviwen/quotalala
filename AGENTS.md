@@ -111,7 +111,7 @@ dağıtan yerel bir masaüstü (Electron) uygulamasıdır. Claude baş koordinat
 12. Görev sonucu doğrulama: CLI çıkış kodundan ayrı engellenme/başarısızlık, incelemede dosya-satır kanıtı ve ortak erişim engelinde gereksiz tekrarları durdurma (Tamamlandı)
 13. Aktif proje, klasöre göre otomatik konuşma/hafıza yükleme, son projeyi hatırlama ve modern masaüstü arayüzü (Tamamlandı)
 14. npm başlatıcısı: proje klasöründe `quotalala` / `npx quotalala`, Electron ile bağımsız paket ve paket içerik doğrulaması (Tamamlandı; npm `quotalala@1.0.0` yayımlandı)
-15. Çok dilli README: Q logosu, hızlı kurulum, dil bağlantıları ve EN/TR/DE/ES/FR kullanım belgeleri (Tamamlandı; yeni belgelerin GitHub ve npm yayını bekliyor)
+15. Çok dilli README: Q logosu, hızlı kurulum, dil bağlantıları ve EN/TR/DE/ES/FR kullanım belgeleri (Tamamlandı; 1.1.0 güncelleme notları ve örnek Electron ekran görüntüleri eklendi)
 16. Ekonomik mod ve kota sınırları: tek ajan/seviye, en fazla 8 alt görev, görev başına 2 deneme ve çalışma başına 20 çağrı; başarısız/aynı çıktıda hafıza çağrısını atlama (Tamamlandı; 256 sonuç özetiyle tekrar tespiti, hafıza 2000 karakter)
 17. Canlı stdout/stderr, süreç ağacını durdurma, ayarlanabilir zaman aşımı, kısmi çıktı ve eksik adımdan devam (Tamamlandı; Windows yerel süreç ve mock ajan testleri; macOS/Linux testi bekliyor)
 18. İsteğe bağlı düzenlenebilir plan onayı, backend doğrulaması ve Claude olmadan doğrudan ajan seçimi (Tamamlandı)
@@ -119,3 +119,5 @@ dağıtan yerel bir masaüstü (Electron) uygulamasıdır. Claude baş koordinat
 20. Tek Electron örneği, etkin görevde proje isteğini bekletme, benzersiz atomik kayıt, kesilen oturumları kurtarma ve özet tabanlı geçmiş (Tamamlandı; eski kayıtların ilk dönüşümü bir kez tam okuma yapar)
 21. Claude yönetim döngüsü: ajan soruları, Claude yanıtları, kontrollü ajanlar arası danışma, somut düzeltme görevleri, görünür ekip konuşması, sonraki tur plan onayı ve devam durumunun kaydı (Tamamlandı; en fazla 3 yönetim turu, kotasız mock ve üretim Electron arayüz testleri; gerçek abonelik çağrısı yapılmadı)
 22. Küçük ekip odası: gerçek görev olaylarından çalışan masalar, soru/yanıt balonları, tıklanabilir ve kopyalanabilir mesajlar, geçmiş/iptal durumları ve azaltılmış hareket desteği; arka planda bitiş/engel/plan onayı bildirimleri ve doğru oturuma geçiş (Tamamlandı; ek CLI çağrısı yok, Gemini risk onayı korunur; masaüstü bildirim sunumu işletim sistemi ayarlarına bağlı)
+
+23. 1.1.0 sürüm belgeleri ve ekran görüntüleri: EN/TR/DE/ES/FR README güncelleme notları, örnek verilerle gerçek Electron görselleri ve npm paketinde belge varlıklarının doğrulanması (Tamamlandı; üç görsel npm paketinde doğrulandı, 1.1.0 yayın kontrolü sürüm listesinde)

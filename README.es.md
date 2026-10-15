@@ -12,6 +12,36 @@
 
 Quotalala es una aplicación de escritorio local con Electron que coordina tus CLI de IA con las sesiones ya iniciadas. Ábrela desde tu proyecto y escribe un prompt: Claude planifica el trabajo, reparte las tareas y revisa los resultados. Las conversaciones guardadas y la memoria del proyecto se cargan automáticamente.
 
+## Novedades de 1.1.0
+
+Claude responde preguntas, consulta a otros agentes y asigna correcciones concretas. La sala del equipo muestra eventos reales sin llamadas adicionales a los agentes.
+
+Incluye modo económico, aprobación del plan editable, salida en directo, Detener, tiempos de espera configurables y continuación de pasos incompletos. Los resultados distinguen afirmaciones del agente y pruebas observadas.
+
+Límites: 3 rondas de coordinación, 8 tareas, 2 intentos por tarea y 20 llamadas de prompt por ejecución. Los contadores locales no son tokens ni el saldo exacto de una suscripción.
+
+[Notas de versión](CHANGELOG.md). Actualiza con `npx quotalala@latest` o `npm install -g quotalala@latest`. Estas funciones requieren 1.1.0 o posterior; npm 1.0.0 mantiene las funciones anteriores. No se instala una actualización automática dentro de la aplicación.
+
+## Capturas de pantalla
+
+Interfaz real de Electron con proyecto y mensajes de ejemplo; sin llamadas de suscripción ni historial privado. La interfaz admite inglés y turco.
+
+![Espacio del proyecto y sala del equipo en directo](assets/screenshots/workspace-en.png)
+
+<details>
+<summary>Plan editable con selección de agente y nivel</summary>
+
+![Plan editable con selección de agente y nivel](assets/screenshots/plan-approval-en.png)
+
+</details>
+
+<details>
+<summary>Sala del equipo en turco</summary>
+
+![Sala del equipo en turco](assets/screenshots/team-room-tr.png)
+
+</details>
+
 ## Inicia desde tu proyecto
 
 Abre una terminal **dentro de la carpeta del proyecto en el que quieres trabajar**:
@@ -49,9 +79,6 @@ quotalala --project "C:\projects\my-app"
 3. **Revisar:** Claude reúne y comprueba los resultados. La cronología muestra asignaciones, transferencias y errores con entradas y salidas desplegables.
 
 La distribución usa registros locales de uso y errores de cuota. No mide las cuotas del proveedor en tiempo real ni garantiza un consumo menor.
-
-
-
 
 ## Una pequeña sala de equipo
 

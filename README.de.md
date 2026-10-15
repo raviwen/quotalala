@@ -12,6 +12,36 @@
 
 Quotalala ist eine lokale Electron-Desktop-App, die deine bereits angemeldeten KI-CLIs koordiniert. Starte sie in deinem Projekt und sende einen Prompt: Claude plant die Arbeit, verteilt Aufgaben und prüft die Ergebnisse. Gespeicherte Gespräche und die Projektzusammenfassung werden automatisch geladen.
 
+## Neu in 1.1.0
+
+Claude beantwortet Rückfragen, holt andere Agenten hinzu und vergibt gezielte Korrekturen. Der Teamraum zeigt echte Aufgabenereignisse ohne zusätzliche Agentenaufrufe.
+
+Sparmodus, bearbeitbare Planfreigabe, Live-Ausgabe, Stopp, einstellbare Zeitlimits und Fortsetzung unvollständiger Schritte sind enthalten. Ergebnisse trennen Agentenaussagen von beobachteten Belegen.
+
+Grenzen: 3 Koordinationsrunden, 8 Aufgaben, 2 Versuche je Aufgabe und 20 Prompt-Aufrufe je Durchlauf. Lokale Nutzungszähler sind weder Tokenzahlen noch genaue Abonnementkontingente.
+
+[Versionshinweise](CHANGELOG.md). Aktualisieren: `npx quotalala@latest` oder `npm install -g quotalala@latest`. Diese Funktionen erfordern mindestens 1.1.0; npm 1.0.0 enthält den bisherigen Funktionsumfang. Kein automatisches Update innerhalb der App.
+
+## Bildschirmfotos
+
+Produktionsoberfläche von Electron mit synthetischem Projekt und Nachrichten; keine Abonnementaufrufe oder privaten Projektverläufe. Die Oberfläche unterstützt Englisch und Türkisch.
+
+![Projektbereich und Live-Teamraum](assets/screenshots/workspace-en.png)
+
+<details>
+<summary>Bearbeitbarer Plan mit Agenten- und Stufenauswahl</summary>
+
+![Bearbeitbarer Plan mit Agenten- und Stufenauswahl](assets/screenshots/plan-approval-en.png)
+
+</details>
+
+<details>
+<summary>Türkischer Teamraum</summary>
+
+![Türkischer Teamraum](assets/screenshots/team-room-tr.png)
+
+</details>
+
 ## Im Projekt starten
 
 Öffne ein Terminal **im gewünschten Projektordner**:
@@ -49,9 +79,6 @@ quotalala --project "C:\projects\my-app"
 3. **Prüfen:** Claude führt die Ergebnisse zusammen. Die Zeitleiste zeigt Zuweisungen, Übergaben und Fehler mit aufklappbaren Ein- und Ausgaben.
 
 Die Verteilung basiert auf lokalen Nutzungs- und Fehlerdaten. Sie misst keine Anbieter-Kontingente in Echtzeit und garantiert keinen geringeren Verbrauch.
-
-
-
 
 ## Ein kleines Teamzimmer
 

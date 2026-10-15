@@ -12,6 +12,36 @@
 
 Quotalala is a local Electron desktop app that coordinates your authenticated AI CLIs. Open it from your project, write one prompt, and let Claude plan the work, assign tasks and review the results. That project's saved conversations and memory load automatically.
 
+## What is new in 1.1.0
+
+Claude manages follow-up questions, consultations and focused revisions. The team room shows real task events without extra agent calls.
+
+Economic mode, editable plan approval, live output, Stop, configurable timeouts and continuation from incomplete steps are included. Results distinguish agent claims from observed evidence.
+
+Coordination is bounded to 3 management rounds, 8 tasks, 2 attempts per task and 20 prompt calls per run. Usage counters are local activity records, not token counts or exact subscription balances.
+
+See [release notes](CHANGELOG.md). Update with `npx quotalala@latest` or `npm install -g quotalala@latest`. These features require 1.1.0 or later; npm 1.0.0 has the earlier feature set. No automatic in-app update is installed.
+
+## Screenshots
+
+Production Electron interface with synthetic project data and messages; no subscription calls or private project history. The interface supports English and Turkish.
+
+![Project workspace and live team room](assets/screenshots/workspace-en.png)
+
+<details>
+<summary>Editable plan with agent and tier selection</summary>
+
+![Editable plan with agent and tier selection](assets/screenshots/plan-approval-en.png)
+
+</details>
+
+<details>
+<summary>Turkish team room</summary>
+
+![Turkish team room](assets/screenshots/team-room-tr.png)
+
+</details>
+
 ## Start in your project
 
 Open a terminal **inside the project you want to work on**:
@@ -49,9 +79,6 @@ quotalala --project "C:\projects\my-app"
 3. **Review:** Claude combines and checks the results. The timeline shows assignments, transfers and failures, with expandable inputs and outputs.
 
 Local usage and quota-error records guide routing; they are not a live provider quota meter or a guarantee of lower usage.
-
-
-
 
 ## A little team room
 

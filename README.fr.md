@@ -12,6 +12,36 @@
 
 Quotalala est une application de bureau locale avec Electron qui coordonne vos CLI d'IA déjà connectées à vos comptes. Ouvrez-la dans votre projet et écrivez un prompt : Claude planifie le travail, répartit les tâches et vérifie les résultats. Les conversations enregistrées et la mémoire du projet se chargent automatiquement.
 
+## Nouveautés de la version 1.1.0
+
+Claude répond aux questions, consulte les autres agents et attribue des corrections précises. La salle de travail affiche les événements réels sans appel supplémentaire aux agents.
+
+Mode économique, validation du plan modifiable, sortie en direct, Arrêter, délais configurables et reprise des étapes incomplètes sont inclus. Les résultats distinguent les déclarations des agents des preuves observées.
+
+Limites : 3 tours de coordination, 8 tâches, 2 essais par tâche et 20 appels de prompt par exécution. Les compteurs locaux ne représentent ni des tokens ni le solde exact des abonnements.
+
+[Notes de version](CHANGELOG.md). Pour mettre à jour : `npx quotalala@latest` ou `npm install -g quotalala@latest`. Ces fonctions nécessitent la version 1.1.0 ou ultérieure ; npm 1.0.0 conserve les fonctions précédentes. Aucune mise à jour automatique dans l’application.
+
+## Captures d’écran
+
+Interface Electron réelle avec projet et messages de démonstration ; aucun appel aux abonnements ni historique privé. L’interface prend en charge l’anglais et le turc.
+
+![Espace du projet et salle de travail en direct](assets/screenshots/workspace-en.png)
+
+<details>
+<summary>Plan modifiable avec sélection des agents et niveaux</summary>
+
+![Plan modifiable avec sélection des agents et niveaux](assets/screenshots/plan-approval-en.png)
+
+</details>
+
+<details>
+<summary>Salle de travail en turc</summary>
+
+![Salle de travail en turc](assets/screenshots/team-room-tr.png)
+
+</details>
+
 ## Démarrer dans votre projet
 
 Ouvrez un terminal **dans le dossier du projet sur lequel vous souhaitez travailler** :
@@ -49,9 +79,6 @@ quotalala --project "C:\projects\my-app"
 3. **Vérifier :** Claude rassemble et contrôle les résultats. La chronologie affiche les affectations, transferts et erreurs, avec les entrées et sorties consultables.
 
 La répartition repose sur les données locales d'utilisation et d'erreurs de quota. Elle ne mesure pas les quotas des fournisseurs en temps réel et ne garantit pas une consommation réduite.
-
-
-
 
 ## Une petite salle d’équipe
 

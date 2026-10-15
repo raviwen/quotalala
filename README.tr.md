@@ -12,6 +12,36 @@
 
 Quotalala, kendi hesabınla giriş yaptığın yapay zekâ CLI araçlarını birlikte çalıştıran yerel bir Electron masaüstü uygulamasıdır. Projenin içinde aç, tek bir prompt yaz; Claude işi planlasın, görevleri dağıtsın ve sonuçları kontrol etsin. O projeye ait kayıtlı konuşmalar ve hafıza otomatik yüklenir.
 
+## 1.1.0 ile gelenler
+
+Claude artık takip sorularını yanıtlıyor, ajanlara danışıyor ve somut düzeltme görevleri veriyor. Ekip odası ek ajan çağrısı yapmadan gerçek görev olaylarını gösteriyor.
+
+Ekonomik mod, düzenlenebilir plan onayı, canlı çıktı, Durdur, ayarlanabilir zaman aşımı ve eksik adımdan devam etme eklendi. Sonuçlarda ajan beyanı ile gözlemlenen kanıt ayrılıyor.
+
+Koordinasyon en fazla 3 yönetim turu, 8 görev, görev başına 2 deneme ve çalışma başına 20 prompt çağrısıyla sınırlı. Kullanım sayaçları yerel etkinlik kaydıdır; token sayısı veya abonelikte kalan kesin kota değildir.
+
+[Sürüm notları](CHANGELOG.md). Güncellemek için `npx quotalala@latest` veya `npm install -g quotalala@latest` kullan. Bu özellikler 1.1.0 ve üzerini gerektirir; npm 1.0.0 önceki özellikleri içerir. Uygulama içinden otomatik güncelleme kurulmaz.
+
+## Ekran görüntüleri
+
+Gerçek Electron arayüzü, örnek proje ve mesajlarla görüntülendi; abonelik çağrısı veya özel proje geçmişi kullanılmadı. Arayüz Türkçe ve İngilizceyi destekler.
+
+![Proje çalışma alanı ve canlı ekip odası](assets/screenshots/workspace-en.png)
+
+<details>
+<summary>Ajan ve seviye seçimiyle düzenlenebilir plan</summary>
+
+![Ajan ve seviye seçimiyle düzenlenebilir plan](assets/screenshots/plan-approval-en.png)
+
+</details>
+
+<details>
+<summary>Türkçe ekip odası</summary>
+
+![Türkçe ekip odası](assets/screenshots/team-room-tr.png)
+
+</details>
+
 ## Projenin içinde başlat
 
 Terminali **üzerinde çalışmak istediğin proje klasöründe** aç:
@@ -49,9 +79,6 @@ quotalala --project "C:\projects\my-app"
 3. **Kontrol:** Claude sonuçları birleştirip kontrol eder. Zaman çizelgesi görev dağılımını, aktarımları ve hataları gösterir; adımların girdi ve çıktıları açılabilir.
 
 Yönlendirme yerel kullanım ve kota hatası kayıtlarına dayanır. Sağlayıcının kotasını canlı ölçmez; daha az kullanım garantisi vermez.
-
-
-
 
 ## Küçük ekip odası
 

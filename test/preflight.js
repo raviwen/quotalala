@@ -32,6 +32,16 @@ for (const file of files.filter(file => /\.(?:js|json|md|yml|yaml)$/.test(file))
 const models = JSON.parse(fs.readFileSync(path.join(root, 'src/main/default-models.json'), 'utf8'));
 assert.ok(models.every(model => model.source && model.name && model.agent !== 'gemini'), 'Only locally verified default models may ship');
 const html = fs.readFileSync(path.join(root, 'src/renderer/index.html'), 'utf8');
+for (const file of files.filter(file => /^README(?:\.[a-z]{2})?\.md$/.test(file))) {
+  const markdown = fs.readFileSync(path.join(root, file), 'utf8');
+  for (const [, target] of markdown.matchAll(/\]\(([^)\s]+)\)/g)) {
+    if (/^(?:https?:|#)/.test(target)) continue;
+    assert.ok(fs.existsSync(path.join(root, target.split('#')[0])), `Broken README link in ${file}: ${target}`);
+  }
+}
+for (const file of files.filter(file => /^assets\/screenshots\/.*\.png$/.test(file))) {
+  assert.equal(fs.readFileSync(path.join(root, file)).subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `Screenshot must be a PNG: ${file}`);
+}
 const keys = [...html.matchAll(/data-i18n(?:-placeholder)?="([^"]+)"/g)].map(match => match[1]);
 for (const key of keys) assert.ok(translations.every(data => typeof data[key] === 'string'), `Missing translation: ${key}`);
 console.log(`PASS: ${files.length} Git candidate files, ${syntaxCount} JavaScript syntax checks, pinned lockfile, ${Object.keys(translations[0]).length} TR/EN keys, license/package inputs and recognizable-secret scan.`);

@@ -1,6 +1,6 @@
 {
   "name": "quotalala",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Desktop AI quota & coordination manager for Claude, Codex, and Gemini",
   "main": "src/main/main.js",
   "scripts": {
@@ -12,7 +12,8 @@
     "check": "node test/preflight.js",
     "check:package": "node test/package-check.js",
     "build": "electron-builder",
-    "pack:cli": "npm run check && node scripts/pack-cli.js"
+    "pack:cli": "npm run check && node scripts/pack-cli.js",
+    "screenshots": "electron scripts/capture-screenshots.js"
   },
   "keywords": [
     "claude",
@@ -28,7 +29,9 @@
     "electron": "44.7.1",
     "electron-builder": "26.15.3"
   },
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "build": {
     "appId": "com.quotalala.app",
     "productName": "Quotalala",
@@ -52,7 +55,8 @@
       "LICENSE",
       "README*.md",
       "AGENTS.md",
-      "RELEASE-CHECKLIST.md"
+      "RELEASE-CHECKLIST.md",
+      "CHANGELOG.md"
     ],
     "directories": {
       "output": "release"
