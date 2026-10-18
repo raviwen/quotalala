@@ -37,27 +37,48 @@
           <section class="prompt-section">
             <div class="prompt-box-card">
               <div class="composer-heading"><label for="promptInput" data-i18n="promptLabel"></label><span id="sessionLabel" class="session-label"></span></div>
-              <textarea id="promptInput" rows="4" data-i18n-placeholder="promptPlaceholder"></textarea>
+              <textarea id="promptInput" rows="3" data-i18n-placeholder="promptPlaceholder"></textarea>
               <div class="run-controls">
                 <label><span data-i18n="runMode"></span><select id="runMode"><option value="coordinated" data-i18n="coordinated"></option><option value="economic" data-i18n="economic"></option></select></label>
-                <label><span data-i18n="agent"></span><select id="directAgent"><option value="codex">Codex</option><option value="claude">Claude</option><option value="gemini">Gemini</option></select></label>
-                <label><span data-i18n="level"></span><select id="directLevel"><option value="hafif" data-i18n="hafif"></option><option value="orta" data-i18n="orta"></option><option value="güçlü" data-i18n="güçlü"></option></select></label>
+                <span id="economicControls" style="display:contents;" hidden>
+                  <label><span data-i18n="agent"></span><select id="directAgent"><option value="codex">Codex</option><option value="claude">Claude</option><option value="gemini">Gemini</option></select></label>
+                  <label><span data-i18n="level"></span><select id="directLevel"><option value="hafif" data-i18n="hafif"></option><option value="orta" data-i18n="orta"></option><option value="güçlü" data-i18n="güçlü"></option></select></label>
+                </span>
                 <label><span data-i18n="timeoutSeconds"></span><input id="timeoutSeconds" type="number" min="1" max="1800" value="180"></label>
                 <label><input id="previewPlan" type="checkbox"><span data-i18n="previewPlan"></span></label>
                 <label><input id="verifyRun" type="checkbox"><span data-i18n="verifyRun"></span></label>
-              </div><p id="directHint" class="muted" data-i18n="directHint"></p>
-              <div class="composer-footer"><span class="composer-context"><span class="folder-mark">▱</span><span id="composerProjectName"></span><span class="context-separator">·</span><span data-i18n="memoryIncluded"></span></span><button id="planAndExecuteBtn" class="btn btn-accent" data-i18n="dispatchBtn"></button></div>
-              <button id="stopBtn" class="btn btn-secondary" data-i18n="stop" disabled></button>
+              </div>
+              <p id="directHint" class="muted" data-i18n="directHint"></p>
+              <div class="composer-footer">
+                <span class="composer-context"><span class="folder-mark">▱</span><span id="composerProjectName"></span><span class="context-separator">·</span><span data-i18n="memoryIncluded"></span></span>
+                <div class="composer-actions">
+                  <span id="agentQuotaWarning" class="agent-quota-warning" role="alert" hidden data-i18n="agentQuotaLimitedWarning">Seçili ajanın kotası dolu; görev kota bekleyecek.</span>
+                  <button id="planAndExecuteBtn" class="btn btn-accent" data-i18n="addTask">Ekle</button>
+                  <button id="stopBtn" class="btn btn-secondary" data-i18n="stop" disabled></button>
+                </div>
+              </div>
               <input id="cwdInput" type="hidden">
             </div>
             <p id="projectPath" class="project-path"></p>
           </section>
           <section class="logs-section">
             <div class="tabs-header">
-              <div class="tabs-list"><button class="tab-btn active" data-tab="liveStreamTab" data-i18n="tabLiveStream"></button><button class="tab-btn" data-tab="timelineTab" data-i18n="activityHeading"></button><button class="tab-btn" data-tab="terminalLogTab" data-i18n="tabTerminalLog"></button></div>
+              <div class="tabs-list"><button class="tab-btn active" data-tab="boardTab" data-i18n="tabBoard"></button><button class="tab-btn" data-tab="liveStreamTab" data-i18n="tabLiveStream"></button><button class="tab-btn" data-tab="timelineTab" data-i18n="activityHeading"></button><button class="tab-btn" data-tab="terminalLogTab" data-i18n="tabTerminalLog"></button></div>
               <div class="tab-actions"><button id="copyAllBtn" class="btn-ghost" data-i18n="copyAll"></button><button id="clearLogsBtn" class="btn-ghost" data-i18n="clearLogs"></button></div>
             </div>
-            <div id="liveStreamTab" class="tab-content active"><div id="streamContainer" class="stream-container selectable" tabindex="0"></div></div>
+            <div id="boardTab" class="tab-content active">
+              <div class="board-container">
+                <div id="boardList" class="board-list selectable" tabindex="0"></div>
+                <div id="boardDetailModal" class="board-detail-container selectable" tabindex="0" hidden>
+                  <div class="section-header">
+                    <h3 id="boardDetailTitle"></h3>
+                    <button id="boardDetailCloseBtn" class="btn-ghost" data-i18n="close">✕</button>
+                  </div>
+                  <div id="boardDetailBody"></div>
+                </div>
+              </div>
+            </div>
+            <div id="liveStreamTab" class="tab-content"><div id="streamContainer" class="stream-container selectable" tabindex="0"></div></div>
             <div id="timelineTab" class="tab-content"><section id="timelineContainer" class="activity-timeline selectable" tabindex="0" hidden></section><div id="timelineEmpty" class="stream-empty" data-i18n="timelinePlaceholder"></div></div>
             <div id="terminalLogTab" class="tab-content">
               <div class="filter-bar" id="levelFilters"><button data-level="all" class="active" data-i18n="all"></button><button data-level="error" data-i18n="errors"></button><button data-level="warning" data-i18n="warnings"></button><select id="agentFilter"><option value="all" data-i18n="allAgents"></option><option value="claude">Claude</option><option value="codex">Codex</option><option value="gemini">Gemini</option></select></div>
@@ -76,7 +97,65 @@
       <div id="notice" role="status" aria-live="polite"></div>
     </main>
   </div>
-  <dialog id="settingsDialog"><div class="section-header"><h2 data-i18n="settings"></h2><button id="closeSettingsBtn" class="btn-ghost" data-i18n="close"></button></div><label class="setting-toggle"><input type="checkbox" id="saveHistoryInput"><span data-i18n="saveHistory"></span></label><label class="setting-toggle"><input type="checkbox" id="notificationsInput"><span data-i18n="taskNotifications"></span></label><p data-i18n="taskNotificationsHint"></p><p data-i18n="privacyHint"></p><button id="clearHistoryBtn" class="btn btn-secondary" data-i18n="clearHistory"></button><details><summary data-i18n="modelSettings"></summary><p data-i18n="modelHint"></p><div class="input-group"><textarea id="modelsInput" rows="12"></textarea></div><button id="saveModelsBtn" class="btn btn-secondary" data-i18n="saveModels"></button></details></dialog>
+  <dialog id="settingsDialog">
+    <div class="section-header"><h2 data-i18n="settings"></h2><button id="closeSettingsBtn" class="btn-ghost" data-i18n="close"></button></div>
+    <label class="setting-toggle"><input type="checkbox" id="saveHistoryInput"><span data-i18n="saveHistory"></span></label>
+    <label class="setting-toggle"><input type="checkbox" id="notificationsInput"><span data-i18n="taskNotifications"></span></label>
+    <label class="setting-toggle"><input type="checkbox" id="autoMergeInput"><span data-i18n="autoMergeLabel">Onaylanan görevleri otomatik birleştir</span></label>
+    <div class="setting-row" style="margin: 12px 0; display: flex; align-items: center; gap: 10px;">
+      <label for="coordinatorModelSelect" data-i18n="coordinatorModelLabel" style="font-size: 12px; color: var(--text);">Koordinatör Claude Modeli:</label>
+      <select id="coordinatorModelSelect" style="background:#141715; color:var(--text); border:1px solid #ffffff16; border-radius:5px; padding:5px 8px; font-size:12px;">
+        <option value="opus">Claude Opus (En Güçlü)</option>
+        <option value="sonnet">Claude Sonnet (Dengeli)</option>
+        <option value="haiku">Claude Haiku (Hafif/Hızlı)</option>
+      </select>
+    </div>
+    <p data-i18n="taskNotificationsHint"></p><p data-i18n="privacyHint"></p>
+    <button id="clearHistoryBtn" class="btn btn-secondary" data-i18n="clearHistory"></button>
+    <details open id="modelsDetails">
+      <summary data-i18n="modelSettings"></summary>
+      <p data-i18n="modelHint"></p>
+      <div id="modelsTableContainer" class="models-table-wrapper">
+        <table id="modelsTable" class="models-table">
+          <thead>
+            <tr>
+              <th data-i18n="modelColAgent">Ajan</th>
+              <th data-i18n="modelColName">Ad</th>
+              <th data-i18n="modelColDisplayName">Görünen ad</th>
+              <th data-i18n="modelColLevel">Seviye</th>
+              <th data-i18n="modelColThinking">Düşünme</th>
+              <th data-i18n="modelColCost">Maliyet</th>
+              <th data-i18n="modelColPreview">Preview</th>
+              <th data-i18n="modelColSource">Kaynak</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="modelsTableBody"></tbody>
+        </table>
+        <div class="models-table-actions">
+          <button id="addModelRowBtn" type="button" class="btn btn-secondary btn-sm" data-i18n="addModelRow">Satır ekle</button>
+          <button id="toggleRawModelsBtn" type="button" class="btn-ghost" data-i18n="showAsJSON">JSON olarak göster</button>
+        </div>
+      </div>
+      <div id="modelsRawContainer" class="input-group" hidden>
+        <textarea id="modelsInput" rows="12"></textarea>
+      </div>
+      <datalist id="claudeModelsList">
+        <option value="haiku">Claude Haiku (Hafif)</option>
+        <option value="sonnet">Claude Sonnet (Orta)</option>
+        <option value="opus">Claude Opus (Güçlü)</option>
+      </datalist>
+      <datalist id="codexModelsList">
+        <option value="gpt-6-luna">GPT-6 Luna (Hafif)</option>
+        <option value="gpt-6.1-sol">GPT-6.1 Sol (Orta)</option>
+        <option value="gpt-6-astra">GPT-6 Astra (Güçlü)</option>
+      </datalist>
+      <div id="modelsTableError" class="models-error-msg" role="alert" hidden></div>
+      <div class="models-save-bar">
+        <button id="saveModelsBtn" class="btn btn-secondary" data-i18n="saveModels"></button>
+      </div>
+    </details>
+  </dialog>
   <dialog id="planDialog"><h2 data-i18n="previewPlan"></h2><p data-i18n="editPlanHint"></p><div id="planEditor"></div><p id="planError" role="alert"></p><button id="approvePlanBtn" class="btn btn-accent" data-i18n="approvePlan"></button><button id="cancelPlanBtn" class="btn btn-secondary" data-i18n="stop"></button></dialog>
   <script src="log-model.js"></script><script src="../shared/activity.js"></script><script src="../shared/team-room.js"></script><script src="team-room-view.js"></script><script src="app.js"></script>
 </body>

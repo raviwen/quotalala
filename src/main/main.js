@@ -1,4 +1,8 @@
 const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, clipboard, dialog } = require('electron');
+app.name = 'Quotalala';
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.quotalala.app');
+}
 if (!app.requestSingleInstanceLock({ argv: process.argv, cwd: process.cwd() })) { app.quit(); } else {
 const path = require('path');
 const fs = require('fs');
@@ -12,10 +16,31 @@ const { SessionRunner } = require('./session-runner');
 const { failure } = require('./events');
 const { TaskNotifications, showNotification } = require('./task-notifications');
 const { launchProject, WorkspaceManager } = require('./workspace');
+const { TaskBoard } = require('./task-board');
+const { BoardRunner } = require('./board-runner');
+const { mergeBranch, removeWorktree } = require('./worktree');
 const store = new HistoryStore();
 const workspace = new WorkspaceManager();
 let mainWindow, tray, reminderTimer, taskNotifications;
 let pendingProject = null;
+const boardRunners = new Map(); // cwd -> BoardRunner
+
+function getBoardRunner(cwd) {
+  const resolved = path.resolve(cwd);
+  if (!boardRunners.has(resolved)) {
+    const board = new TaskBoard(resolved, store.root);
+    const runner = new BoardRunner({
+      cwd: resolved,
+      root: store.root,
+      board,
+      emit: (ch, data) => emit(ch, data),
+      store
+    });
+    runner.start();
+    boardRunners.set(resolved, runner);
+  }
+  return boardRunners.get(resolved);
+}
 function flushProject() {
   if (!pendingProject || runner.busy || health.running) return;
   const cwd = pendingProject; pendingProject = null;
@@ -32,15 +57,30 @@ app.on('second-instance', (event, argv, workingDirectory, request) => {
 let isQuitting = false;
 let language = 'tr';
 const iconPath = path.join(__dirname, '../../assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+const appIcon = nativeImage.createFromPath(iconPath);
 function emit(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
   taskNotifications?.consume(channel, payload);
+  if (channel === 'board:changed' && payload.taskId) {
+    const task = payload.tasks?.find(t => t.id === payload.taskId);
+    if (task && (task.status === 'needs_user' || task.status === 'ready_to_merge')) {
+      const isTR = language === 'tr';
+      const title = task.status === 'needs_user'
+        ? (isTR ? 'Senden cevap bekleniyor' : 'Your answer is needed')
+        : (isTR ? 'Birleştirmeye hazır' : 'Ready to merge');
+      const body = task.title || task.request?.slice(0, 50) || '';
+      notify(title, body, () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+      });
+    }
+  }
 }
 const health = new HealthService({ agents: getAllAgents(), quota, models, emit });
 const runner = new SessionRunner({ store, coordinator, emit, publish: () => { health.publish(); updateTray(); } });
 function updateTray() { tray?.setToolTip(quota.getTraySummary()); }
 function notify(title, body, click = () => { mainWindow?.show(); mainWindow?.focus(); }) {
-  try { return showNotification(Notification, { title, body, icon: iconPath, click }); } catch { return false; }
+  try { return showNotification(Notification, { title, body, icon: appIcon.isEmpty() ? iconPath : appIcon, click }); } catch { return false; }
 }
 taskNotifications = new TaskNotifications({
   send: notify, getSettings: () => store.getSettings(), getLanguage: () => language,
@@ -48,8 +88,26 @@ taskNotifications = new TaskNotifications({
   focus: target => { mainWindow?.show(); mainWindow?.focus(); emit('session:focus', target); }
 });
 function createWindow() {
-  mainWindow = new BrowserWindow({ width: 1420, height: 950, minWidth: 1000, minHeight: 700, backgroundColor: '#0b0f19', icon: iconPath,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  mainWindow = new BrowserWindow({
+    title: 'Quotalala',
+    width: 1420,
+    height: 950,
+    minWidth: 1000,
+    minHeight: 700,
+    backgroundColor: '#0b0f19',
+    icon: appIcon.isEmpty() ? iconPath : appIcon,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  if (!appIcon.isEmpty()) {
+    try { mainWindow.setIcon(appIcon); } catch {}
+  }
+  mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', event => event.preventDefault());
@@ -57,7 +115,7 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 function createTray() {
-  tray = new Tray(nativeImage.createFromPath(iconPath)); updateTray();
+  tray = new Tray(appIcon.isEmpty() ? iconPath : appIcon); updateTray();
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Quotalala', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
     { label: language === 'tr' ? 'Etkin ajanları test et' : 'Test enabled agents', click: async () => {
@@ -68,7 +126,15 @@ function createTray() {
   ]));
   tray.on('double-click', () => mainWindow?.show());
 }
-function ensureIdle() { if (runner.busy || health.running) throw new Error('An operation is already running.'); }
+function ensureIdle() {
+  if (runner.busy || health.running) throw new Error('An operation is already running.');
+  const curProject = workspace.get().cwd;
+  if (curProject && boardRunners.has(path.resolve(curProject))) {
+    if (boardRunners.get(path.resolve(curProject)).hasActiveTasks()) {
+      throw new Error('A board task is currently running.');
+    }
+  }
+}
 function register(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw new Error('Untrusted IPC sender.');
@@ -121,6 +187,76 @@ register('text:menu', ({ selection, all }) => {
   ]).popup({ window: mainWindow });
 });
 register('language:set', value => { language = value === 'en' ? 'en' : 'tr'; if (tray) { tray.destroy(); createTray(); } });
+register('board:list', () => {
+  const curProject = workspace.get().cwd;
+  if (!curProject) return [];
+  const br = getBoardRunner(curProject);
+  return br.board.list();
+});
+register('board:add', async ({ request }) => {
+  const curProject = workspace.requireProject();
+  if (runner.busy) throw new Error('Session is busy.');
+  const br = getBoardRunner(curProject);
+  const task = br.board.add(request);
+  br.emitChanged(task.id);
+  br.tick().catch(() => {});
+  return task;
+});
+register('board:answer', async ({ taskId, text }) => {
+  const curProject = workspace.requireProject();
+  const br = getBoardRunner(curProject);
+  await br.answer(taskId, text);
+  return br.board.get(taskId);
+});
+register('board:cancel', ({ taskId }) => {
+  const curProject = workspace.requireProject();
+  const br = getBoardRunner(curProject);
+  br.cancel(taskId);
+  return br.board.get(taskId);
+});
+register('board:retry', ({ taskId }) => {
+  const curProject = workspace.requireProject();
+  if (runner.busy) throw new Error('Session is busy.');
+  const br = getBoardRunner(curProject);
+  br.retry(taskId);
+  return br.board.get(taskId);
+});
+register('board:merge', async ({ taskId }) => {
+  const curProject = workspace.requireProject();
+  const br = getBoardRunner(curProject);
+  const task = br.board.get(taskId);
+  if (!task || task.status !== 'ready_to_merge') {
+    throw new Error('Task is not ready to merge.');
+  }
+  if (!task.branch) {
+    br.board.setStatus(taskId, 'merged', 'Git branch bulunamadı, birleştirildi olarak işaretlendi');
+    br.emitChanged(taskId);
+    return { ok: true };
+  }
+  const mergeRes = await mergeBranch(curProject, task.branch);
+  if (mergeRes.ok) {
+    br.board.setStatus(taskId, 'merged', 'Değişiklikler başarıyla birleştirildi');
+    if (task.worktreePath) {
+      await removeWorktree(curProject, task.worktreePath);
+    }
+    br.emitChanged(taskId);
+    return { ok: true };
+  }
+  if (mergeRes.reason === 'dirty') {
+    return { ok: false, reason: 'dirty', files: mergeRes.files || [] };
+  }
+  if (mergeRes.reason === 'conflict') {
+    const conflictMsg = `Çakışan dosyalar: ${(mergeRes.files || []).join(', ')}`;
+    br.board.update(taskId, {
+      question: conflictMsg,
+      status: 'needs_user'
+    });
+    br.board.addHistory(taskId, 'status', `Birleştirme çakışması: ${conflictMsg}`);
+    br.emitChanged(taskId);
+    return { ok: false, reason: 'conflict', files: mergeRes.files };
+  }
+  return { ok: false, reason: 'unknown' };
+});
 app.whenReady().then(() => {
   if (process.platform === 'win32') app.setAppUserModelId('com.quotalala.app');
   store.recoverInterrupted();

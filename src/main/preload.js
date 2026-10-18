@@ -18,5 +18,8 @@ contextBridge.exposeInMainWorld('quotalalaAPI', {
   getWorkspace: invoke('workspace:get'), openWorkspace: invoke('workspace:open'),
   chooseFolder: invoke('folder:choose'), copy: invoke('clipboard:copy'), textMenu: invoke('text:menu'), setLanguage: invoke('language:set'),
   onLog: listen('stream:log'), onState: listen('state:update'), onPlan: listen('session:plan'),
-  onOutput: listen('session:output'), onActivity: listen('session:activity'), onSelectAll: listen('text:select-all')
+  onOutput: listen('session:output'), onActivity: listen('session:activity'), onSelectAll: listen('text:select-all'),
+  listBoard: invoke('board:list'), addBoardTask: invoke('board:add'), answerBoardTask: invoke('board:answer'),
+  cancelBoardTask: invoke('board:cancel'), mergeBoardTask: invoke('board:merge'), retryBoardTask: invoke('board:retry'),
+  onBoardChanged: listen('board:changed'), onBoardStream: listen('board:stream')
 });

@@ -35,12 +35,22 @@ class HistoryStore {
     const { runOptions } = require('./run-options');
     let options;
     try { options = runOptions(saved); } catch { options = runOptions(); }
-    return { ...options, notificationsEnabled: saved.notificationsEnabled !== false, saveHistory: saved.saveHistory !== false, geminiEnabled: saved.geminiEnabled === true && saved.geminiRiskAccepted === true, geminiRiskAccepted: saved.geminiRiskAccepted === true };
+    return {
+      ...options,
+      notificationsEnabled: saved.notificationsEnabled !== false,
+      saveHistory: saved.saveHistory !== false,
+      geminiEnabled: saved.geminiEnabled === true && saved.geminiRiskAccepted === true,
+      geminiRiskAccepted: saved.geminiRiskAccepted === true,
+      coordinatorModel: saved.coordinatorModel || 'opus',
+      autoMerge: saved.autoMerge === true
+    };
   }
   saveSettings(changes) {
     const settings = { ...this.getSettings(), ...require('./run-options').runOptions({ ...this.getSettings(), ...changes }) };
     if (typeof changes.saveHistory === 'boolean') settings.saveHistory = changes.saveHistory;
     if (typeof changes.notificationsEnabled === 'boolean') settings.notificationsEnabled = changes.notificationsEnabled;
+    if (typeof changes.coordinatorModel === 'string') settings.coordinatorModel = changes.coordinatorModel;
+    if (typeof changes.autoMerge === 'boolean') settings.autoMerge = changes.autoMerge;
     if (typeof changes.geminiEnabled === 'boolean') {
       if (changes.geminiEnabled && changes.geminiRiskAccepted !== true) throw new Error('Gemini risk acceptance is required.');
       settings.geminiEnabled = changes.geminiEnabled;

@@ -94,13 +94,25 @@ function renderState() {
   $('systemHealthBadge').className = 'status-pill ' + (state.healthRunning || healthy && healthy < active.length ? 'status-partial' : healthy && healthy === active.length ? 'status-ready' : 'status-loading');
   $('runAllHealthBtn').disabled = busy || state.healthRunning;
   $('planAndExecuteBtn').disabled = busy || state.healthRunning || !project.cwd;
-  $('planAndExecuteBtn').textContent = t(busy ? 'dispatching' : 'dispatchBtn');
+  $('planAndExecuteBtn').textContent = t(busy ? 'dispatching' : 'addTask');
   $('stopBtn').disabled = !busy;
   for (const id of ['runMode', 'directAgent', 'directLevel', 'timeoutSeconds', 'previewPlan', 'verifyRun']) $(id).disabled = busy;
   $('previewPlan').disabled ||= $('runMode').value === 'economic';
   $('verifyRun').disabled ||= $('runMode').value === 'economic';
+  const isEconomic = $('runMode').value === 'economic';
+  const economicControls = $('economicControls');
+  if (economicControls) {
+    economicControls.hidden = !isEconomic;
+  }
   for (const option of $('directAgent').options) { const agent = state.agents[option.value]; option.disabled = !agent?.enabled || ['limited', 'missing', 'unauthenticated', 'error'].includes(agent.status); }
-  if (!busy && $('directAgent').selectedOptions[0]?.disabled) { const ready = [...$('directAgent').options].find(option => !option.disabled); if (ready) $('directAgent').value = ready.value; }
+  const selectedAgentId = $('directAgent').value;
+  const selectedAgentState = state.agents[selectedAgentId];
+  const isAgentLimited = isEconomic && selectedAgentState?.status === 'limited';
+  const warningEl = $('agentQuotaWarning');
+  if (warningEl) {
+    warningEl.hidden = !isAgentLimited;
+  }
+  if (!busy && $('directAgent').selectedOptions[0]?.disabled && !isAgentLimited) { const ready = [...$('directAgent').options].find(option => !option.disabled); if (ready) $('directAgent').value = ready.value; }
   $('cwdInput').disabled = busy; $('chooseFolderBtn').disabled = busy;
   $('recentProjects').disabled = busy || state.healthRunning;
   for (const id of ['memoryInput', 'saveMemoryBtn', 'resetMemoryBtn']) $(id).disabled = !project.cwd || busy;
@@ -339,6 +351,7 @@ async function stopSession() { await api.cancelSession(); pendingApproval = null
 $('stopBtn').addEventListener('click', () => perform(stopSession)); $('cancelPlanBtn').addEventListener('click', () => perform(stopSession));
 $('planDialog').addEventListener('cancel', event => { event.preventDefault(); perform(stopSession); });
 $('runMode').addEventListener('change', renderState);
+$('directAgent').addEventListener('change', renderState);
 function receiveWorkspace(value) { if (busy) { deferredWorkspace = value; return; } project = value; newSession(); renderProject(); renderState(); perform(async () => { await refreshHistory(); await loadMemory(); }); }
 api.onWorkspace(receiveWorkspace);
 api.onSelectAll(() => { if (contextTarget) selectRegion(contextTarget); });
@@ -365,7 +378,18 @@ api.onSessionFocus(target => perform(async () => {
 $('toggleRoomBtn').addEventListener('click', () => { roomCollapsed = !roomCollapsed; renderRoom(); });
 $('closeRoomMessageBtn').addEventListener('click', () => { inspectedMessage = null; $('roomMessageDetails').hidden = true; $('roomLatestMessage').focus(); });
 $('runAllHealthBtn').addEventListener('click', () => perform(() => testHealth()));
-$('planAndExecuteBtn').addEventListener('click', () => perform(runSession));
+async function submitTask() {
+  if (busy || state.healthRunning || !project.cwd) return;
+  const text = $('promptInput').value.trim();
+  if (!text) { notice(t('enterPrompt')); return; }
+  $('promptInput').value = '';
+  // Ensure board tab is active
+  activeTab = 'boardTab';
+  document.querySelectorAll('.tab-btn').forEach(node => node.classList.toggle('active', node.dataset.tab === 'boardTab'));
+  document.querySelectorAll('.tab-content').forEach(node => node.classList.toggle('active', node.id === 'boardTab'));
+  await api.addBoardTask({ request: text });
+}
+$('planAndExecuteBtn').addEventListener('click', () => perform(submitTask));
 $('newSessionBtn').addEventListener('click', newSession);
 $('langTr').addEventListener('click', () => perform(() => setLanguage('tr')));
 $('langEn').addEventListener('click', () => perform(() => setLanguage('en')));
@@ -379,18 +403,669 @@ $('copyAllBtn').addEventListener('click', () => perform(() => copy(activeTab ===
 $('levelFilters').querySelectorAll('[data-level]').forEach(btn => btn.addEventListener('click', () => { currentLevel = btn.dataset.level; $('levelFilters').querySelectorAll('[data-level]').forEach(node => node.classList.toggle('active', node === btn)); renderLogs(); }));
 $('agentFilter').addEventListener('change', () => { currentAgent = $('agentFilter').value; renderLogs(); });
 document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => { activeTab = btn.dataset.tab; document.querySelectorAll('.tab-btn').forEach(node => node.classList.toggle('active', node === btn)); document.querySelectorAll('.tab-content').forEach(node => node.classList.toggle('active', node.id === activeTab)); }));
-$('settingsBtn').addEventListener('click', () => perform(async () => { settings = await api.getSettings(); $('saveHistoryInput').checked = settings.saveHistory; $('notificationsInput').checked = settings.notificationsEnabled !== false; $('notificationsInput').disabled = busy; $('modelsInput').value = JSON.stringify(models, null, 2); $('settingsDialog').showModal(); }));
+let showingRawModels = false;
+
+function parseModelRowData(m) {
+  let level = 'orta';
+  let cost = 1;
+  let thinking = 'none';
+  if (m.levels && typeof m.levels === 'object') {
+    const firstKey = Object.keys(m.levels)[0];
+    if (firstKey) {
+      level = firstKey;
+      cost = m.levels[firstKey]?.cost ?? 1;
+      thinking = m.levels[firstKey]?.thinking || 'none';
+    }
+  } else if (m.level) {
+    level = m.level;
+    cost = m.cost ?? 1;
+    thinking = m.thinking || 'none';
+  }
+  return {
+    agent: m.agent || 'claude',
+    name: m.name || '',
+    displayName: m.displayName || m.name || '',
+    level,
+    cost: Number(cost) || 1,
+    thinking,
+    preview: !!m.preview,
+    source: m.source || '',
+    originalLevels: m.levels
+  };
+}
+
+function renderModelsTable(modelList) {
+  const tbody = $('modelsTableBody');
+  if (!tbody) return;
+  tbody.replaceChildren();
+  $('modelsTableError').hidden = true;
+  $('modelsTableError').textContent = '';
+
+  const items = Array.isArray(modelList) ? modelList : [];
+  items.forEach((item, index) => {
+    const data = parseModelRowData(item);
+    const tr = el('tr');
+    tr.dataset.index = String(index);
+
+    // Agent dropdown
+    const tdAgent = el('td');
+    const selAgent = el('select', 'model-agent-select');
+    for (const a of ['claude', 'codex', 'gemini']) {
+      const opt = el('option', '', a);
+      opt.value = a;
+      opt.selected = a === data.agent;
+      selAgent.append(opt);
+    }
+    tdAgent.append(selAgent);
+
+    // Name input
+    const tdName = el('td');
+    const inName = el('input');
+    inName.type = 'text';
+    inName.value = data.name;
+    inName.className = 'model-name-input';
+    inName.setAttribute('list', data.agent === 'codex' ? 'codexModelsList' : 'claudeModelsList');
+    tdName.append(inName);
+
+    selAgent.addEventListener('change', () => {
+      inName.setAttribute('list', selAgent.value === 'codex' ? 'codexModelsList' : 'claudeModelsList');
+    });
+
+    // DisplayName input
+    const tdDisplayName = el('td');
+    const inDisplayName = el('input');
+    inDisplayName.type = 'text';
+    inDisplayName.value = data.displayName;
+    inDisplayName.className = 'model-displayname-input';
+    tdDisplayName.append(inDisplayName);
+
+    // Level dropdown
+    const tdLevel = el('td');
+    const selLevel = el('select', 'model-level-select');
+    for (const lvl of ['hafif', 'orta', 'güçlü']) {
+      const opt = el('option', '', t(lvl));
+      opt.value = lvl;
+      opt.selected = lvl === data.level;
+      selLevel.append(opt);
+    }
+    tdLevel.append(selLevel);
+
+    // Thinking dropdown
+    const tdThinking = el('td');
+    const selThinking = el('select', 'model-thinking-select');
+    const thinkingOptions = [
+      { val: 'none', label: 'Varsayılan' },
+      { val: 'low', label: 'Düşük (Low)' },
+      { val: 'medium', label: 'Orta (Medium)' },
+      { val: 'high', label: 'Yüksek (High)' },
+      { val: 'max', label: 'Maksimum (Max)' }
+    ];
+    for (const to of thinkingOptions) {
+      const opt = el('option', '', to.label);
+      opt.value = to.val;
+      opt.selected = to.val === data.thinking;
+      selThinking.append(opt);
+    }
+    tdThinking.append(selThinking);
+
+    // Cost input
+    const tdCost = el('td');
+    const inCost = el('input');
+    inCost.type = 'number';
+    inCost.min = '1';
+    inCost.value = String(data.cost);
+    inCost.className = 'model-cost-input';
+    tdCost.append(inCost);
+
+    // Preview checkbox
+    const tdPreview = el('td');
+    const inPreview = el('input');
+    inPreview.type = 'checkbox';
+    inPreview.checked = data.preview;
+    inPreview.className = 'model-preview-input';
+    tdPreview.append(inPreview);
+
+    // Source input
+    const tdSource = el('td');
+    const inSource = el('input');
+    inSource.type = 'text';
+    inSource.value = data.source;
+    inSource.className = 'model-source-input';
+    tdSource.append(inSource);
+
+    // Delete button
+    const tdDelete = el('td');
+    const delBtn = button(t('deleteModelRow'), () => {
+      tr.remove();
+      syncModelsTableToRaw();
+    }, 'btn-ghost');
+    tdDelete.append(delBtn);
+
+    // Re-sync raw on input change
+    for (const input of [selAgent, inName, inDisplayName, selLevel, selThinking, inCost, inPreview, inSource]) {
+      input.addEventListener('change', () => {
+        tr.classList.remove('row-error');
+        syncModelsTableToRaw();
+      });
+    }
+
+    tr.append(tdAgent, tdName, tdDisplayName, tdLevel, tdThinking, tdCost, tdPreview, tdSource, tdDelete);
+    tbody.append(tr);
+  });
+}
+
+function getModelsFromTable() {
+  const tbody = $('modelsTableBody');
+  if (!tbody) return [];
+  const rows = tbody.querySelectorAll('tr');
+  const result = [];
+  let hasError = false;
+  let firstErrorMsg = '';
+
+  rows.forEach((tr, idx) => {
+    tr.classList.remove('row-error');
+    const agent = tr.querySelector('.model-agent-select')?.value;
+    const name = tr.querySelector('.model-name-input')?.value.trim();
+    const displayName = tr.querySelector('.model-displayname-input')?.value.trim();
+    const level = tr.querySelector('.model-level-select')?.value;
+    const cost = Number(tr.querySelector('.model-cost-input')?.value);
+    const preview = tr.querySelector('.model-preview-input')?.checked;
+    const source = tr.querySelector('.model-source-input')?.value.trim();
+
+    const thinking = tr.querySelector('.model-thinking-select')?.value;
+
+    let rowError = null;
+    if (!['claude', 'codex', 'gemini'].includes(agent)) {
+      rowError = 'Geçersiz ajan';
+    } else if (!name || !/^[a-zA-Z0-9][a-zA-Z0-9_.:/-]*$/.test(name)) {
+      rowError = 'Geçersiz model adı (özel karakterler içermemeli)';
+    } else if (!['hafif', 'orta', 'güçlü'].includes(level)) {
+      rowError = 'Geçersiz seviye';
+    } else if (!Number.isFinite(cost) || cost <= 0) {
+      rowError = 'Maliyet en az 1 olmalıdır';
+    } else if (!source) {
+      rowError = 'Kaynak alanı boş bırakılamaz';
+    }
+
+    if (rowError) {
+      tr.classList.add('row-error');
+      hasError = true;
+      if (!firstErrorMsg) {
+        firstErrorMsg = `Satır ${idx + 1}: ${rowError}`;
+      }
+    }
+
+    const levelDetails = {
+      cost: Number.isFinite(cost) && cost > 0 ? cost : 1,
+      description: `${t(level)} seviyesi`
+    };
+    if (thinking && thinking !== 'none') {
+      levelDetails.thinking = thinking;
+    }
+
+    const modelObj = {
+      agent,
+      name,
+      displayName: displayName || name,
+      preview: !!preview,
+      source,
+      levels: {
+        [level]: levelDetails
+      }
+    };
+    result.push(modelObj);
+  });
+
+  if (hasError) {
+    const errEl = $('modelsTableError');
+    errEl.hidden = false;
+    errEl.textContent = firstErrorMsg;
+    throw new Error(firstErrorMsg);
+  }
+
+  $('modelsTableError').hidden = true;
+  return result;
+}
+
+function syncModelsTableToRaw() {
+  try {
+    const list = [];
+    const tbody = $('modelsTableBody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const agent = tr.querySelector('.model-agent-select')?.value;
+      const name = tr.querySelector('.model-name-input')?.value.trim() || '';
+      const displayName = tr.querySelector('.model-displayname-input')?.value.trim() || name;
+      const level = tr.querySelector('.model-level-select')?.value || 'orta';
+      const thinking = tr.querySelector('.model-thinking-select')?.value;
+      const cost = Number(tr.querySelector('.model-cost-input')?.value) || 1;
+      const preview = tr.querySelector('.model-preview-input')?.checked || false;
+      const source = tr.querySelector('.model-source-input')?.value.trim() || '';
+      const levelDetails = { cost, description: `${level} tier` };
+      if (thinking && thinking !== 'none') {
+        levelDetails.thinking = thinking;
+      }
+      list.push({
+        agent,
+        name,
+        displayName,
+        preview,
+        source,
+        levels: {
+          [level]: levelDetails
+        }
+      });
+    });
+    $('modelsInput').value = JSON.stringify(list, null, 2);
+  } catch {}
+}
+
+$('addModelRowBtn')?.addEventListener('click', () => {
+  const tbody = $('modelsTableBody');
+  if (!tbody) return;
+  const newRow = [{
+    agent: 'claude',
+    name: 'new-model',
+    displayName: 'New Model',
+    level: 'hafif',
+    cost: 1,
+    preview: false,
+    source: 'Verified CLI'
+  }];
+  const tr = el('tr');
+  const tdAgent = el('td');
+  const selAgent = el('select', 'model-agent-select');
+  for (const a of ['claude', 'codex', 'gemini']) {
+    const opt = el('option', '', a);
+    opt.value = a;
+    selAgent.append(opt);
+  }
+  tdAgent.append(selAgent);
+
+  const tdName = el('td');
+  const inName = el('input');
+  inName.type = 'text';
+  inName.value = 'new-model';
+  inName.className = 'model-name-input';
+  inName.setAttribute('list', selAgent.value === 'codex' ? 'codexModelsList' : 'claudeModelsList');
+  selAgent.addEventListener('change', () => {
+    inName.setAttribute('list', selAgent.value === 'codex' ? 'codexModelsList' : 'claudeModelsList');
+  });
+  tdName.append(inName);
+
+  const tdDisplayName = el('td');
+  const inDisplayName = el('input');
+  inDisplayName.type = 'text';
+  inDisplayName.value = 'New Model';
+  inDisplayName.className = 'model-displayname-input';
+  tdDisplayName.append(inDisplayName);
+
+  const tdLevel = el('td');
+  const selLevel = el('select', 'model-level-select');
+  for (const lvl of ['hafif', 'orta', 'güçlü']) {
+    const opt = el('option', '', t(lvl));
+    opt.value = lvl;
+    selLevel.append(opt);
+  }
+  tdLevel.append(selLevel);
+
+  const tdThinking = el('td');
+  const selThinking = el('select', 'model-thinking-select');
+  const thinkingOptions = [
+    { val: 'none', label: 'Varsayılan' },
+    { val: 'low', label: 'Düşük (Low)' },
+    { val: 'medium', label: 'Orta (Medium)' },
+    { val: 'high', label: 'Yüksek (High)' },
+    { val: 'max', label: 'Maksimum (Max)' }
+  ];
+  for (const to of thinkingOptions) {
+    const opt = el('option', '', to.label);
+    opt.value = to.val;
+    selThinking.append(opt);
+  }
+  tdThinking.append(selThinking);
+
+  const tdCost = el('td');
+  const inCost = el('input');
+  inCost.type = 'number';
+  inCost.min = '1';
+  inCost.value = '1';
+  inCost.className = 'model-cost-input';
+  tdCost.append(inCost);
+
+  const tdPreview = el('td');
+  const inPreview = el('input');
+  inPreview.type = 'checkbox';
+  inPreview.checked = false;
+  inPreview.className = 'model-preview-input';
+  tdPreview.append(inPreview);
+
+  const tdSource = el('td');
+  const inSource = el('input');
+  inSource.type = 'text';
+  inSource.value = 'CLI alias';
+  inSource.className = 'model-source-input';
+  tdSource.append(inSource);
+
+  const tdDelete = el('td');
+  const delBtn = button(t('deleteModelRow'), () => {
+    tr.remove();
+    syncModelsTableToRaw();
+  }, 'btn-ghost');
+  tdDelete.append(delBtn);
+
+  for (const input of [selAgent, inName, inDisplayName, selLevel, selThinking, inCost, inPreview, inSource]) {
+    input.addEventListener('change', () => {
+      tr.classList.remove('row-error');
+      syncModelsTableToRaw();
+    });
+  }
+
+  tr.append(tdAgent, tdName, tdDisplayName, tdLevel, tdThinking, tdCost, tdPreview, tdSource, tdDelete);
+  tbody.append(tr);
+  syncModelsTableToRaw();
+});
+
+$('toggleRawModelsBtn')?.addEventListener('click', () => {
+  showingRawModels = !showingRawModels;
+  $('modelsTableContainer').hidden = showingRawModels;
+  $('modelsRawContainer').hidden = !showingRawModels;
+  $('toggleRawModelsBtn').textContent = t(showingRawModels ? 'showAsTable' : 'showAsJSON');
+  if (!showingRawModels) {
+    try {
+      const parsed = JSON.parse($('modelsInput').value);
+      renderModelsTable(parsed);
+    } catch {}
+  } else {
+    syncModelsTableToRaw();
+  }
+});
+
+$('settingsBtn').addEventListener('click', () => perform(async () => {
+  settings = await api.getSettings();
+  $('saveHistoryInput').checked = settings.saveHistory;
+  $('notificationsInput').checked = settings.notificationsEnabled !== false;
+  $('notificationsInput').disabled = busy;
+  if ($('autoMergeInput')) {
+    $('autoMergeInput').checked = settings.autoMerge === true;
+    $('autoMergeInput').disabled = busy;
+  }
+  if ($('coordinatorModelSelect')) {
+    $('coordinatorModelSelect').value = settings.coordinatorModel || 'opus';
+  }
+  $('modelsInput').value = JSON.stringify(models, null, 2);
+  showingRawModels = false;
+  $('modelsTableContainer').hidden = false;
+  $('modelsRawContainer').hidden = true;
+  $('toggleRawModelsBtn').textContent = t('showAsJSON');
+  renderModelsTable(models);
+  $('settingsDialog').showModal();
+}));
 $('closeSettingsBtn').addEventListener('click', () => $('settingsDialog').close());
 $('saveHistoryInput').addEventListener('change', () => perform(async () => { settings = await api.saveSettings({ saveHistory: $('saveHistoryInput').checked }); }));
 $('notificationsInput').addEventListener('change', () => perform(async () => { settings = await api.saveSettings({ notificationsEnabled: $('notificationsInput').checked }); }));
+$('autoMergeInput')?.addEventListener('change', () => perform(async () => {
+  settings = await api.saveSettings({ autoMerge: $('autoMergeInput').checked });
+  notice(t('settingsSaved') || 'Ayar kaydedildi.');
+}));
+$('coordinatorModelSelect')?.addEventListener('change', () => perform(async () => {
+  settings = await api.saveSettings({ coordinatorModel: $('coordinatorModelSelect').value });
+  notice(t('settingsSaved') || 'Ayar kaydedildi.');
+}));
 $('clearHistoryBtn').addEventListener('click', () => perform(async () => { if (!confirm(t('clearHistoryConfirm'))) return; await api.clearHistory(); newSession(); await refreshHistory(); await loadMemory(); }));
-$('saveModelsBtn').addEventListener('click', () => perform(async () => { const list = JSON.parse($('modelsInput').value); if (!await api.saveModels(list)) throw new Error(t('operationFailed')); models = await api.getModels(); renderState(); notice(t('modelsSaved')); }));
+$('saveModelsBtn').addEventListener('click', () => perform(async () => {
+  let listToSave;
+  if (showingRawModels) {
+    try {
+      listToSave = JSON.parse($('modelsInput').value);
+    } catch {
+      $('modelsTableError').hidden = false;
+      $('modelsTableError').textContent = t('modelsInvalidJSON');
+      throw new Error(t('modelsInvalidJSON'));
+    }
+  } else {
+    listToSave = getModelsFromTable();
+  }
+  if (!await api.saveModels(listToSave)) {
+    throw new Error(t('operationFailed'));
+  }
+  models = await api.getModels();
+  renderState();
+  notice(t('modelsSaved'));
+  $('modelsTableError').hidden = true;
+}));
+let boardTasks = [], selectedBoardTaskId = null, boardStreams = new Map();
+
+function boardStatusLabel(status, resumeAt) {
+  if (status === 'waiting_quota' && resumeAt) {
+    const timeStr = new Date(resumeAt).toLocaleTimeString();
+    return `${t('status_waiting_quota')} (${timeStr})`;
+  }
+  return t(`status_${status}`) || status;
+}
+
+function renderBoard() {
+  const container = $('boardList');
+  if (!container) return;
+  container.replaceChildren();
+
+  if (!boardTasks.length) {
+    container.append(el('div', 'stream-empty', t('boardEmpty')));
+    return;
+  }
+
+  for (const task of boardTasks) {
+    const card = el('div', `board-card ${task.id === selectedBoardTaskId ? 'active' : ''}`);
+    card.id = `board-task-${task.id}`;
+
+    const header = el('div', 'board-card-header');
+    const title = el('span', 'board-card-title', task.title || task.request.slice(0, 50));
+    const badge = el('span', `badge badge-${task.status}`, boardStatusLabel(task.status, task.resumeAt));
+    header.append(title, badge);
+
+    const meta = el('div', 'board-card-meta');
+    if (task.agent) meta.append(el('span', '', `${task.agent.toUpperCase()} • ${task.level || ''}`));
+    if (task.branch) meta.append(el('span', '', `⑂ ${task.branch}`));
+    header.append(meta);
+
+    const lastHist = task.history?.at(-1);
+    const historyLine = el('div', 'board-card-history', lastHist ? `${lastHist.type === 'status' ? '• ' : '― '}${lastHist.text}` : '');
+
+    card.append(header, historyLine);
+    card.addEventListener('click', () => {
+      selectedBoardTaskId = task.id;
+      renderBoard();
+      renderBoardDetail(task.id);
+    });
+    container.append(card);
+  }
+
+  if (selectedBoardTaskId) {
+    renderBoardDetail(selectedBoardTaskId);
+  }
+}
+
+function renderBoardDetail(taskId) {
+  const task = boardTasks.find(t => t.id === taskId);
+  const modal = $('boardDetailModal');
+  const body = $('boardDetailBody');
+  if (!task || !modal || !body) return;
+
+  modal.hidden = false;
+  $('boardDetailTitle').textContent = task.title || task.request.slice(0, 50) || 'Görev';
+  body.replaceChildren();
+
+  // Subtitle line directly under title: Status badge + Agent / Level (+ Branch)
+  const subline = el('div', 'board-detail-subline');
+  subline.append(el('span', `badge badge-${task.status}`, boardStatusLabel(task.status, task.resumeAt)));
+  if (task.agent) {
+    subline.append(el('span', '', `${task.agent.toUpperCase()} • ${task.level || ''}`));
+  }
+  if (task.branch) {
+    subline.append(el('span', '', `⑂ ${task.branch}`));
+  }
+  body.append(subline);
+
+  // İSTEK: User original request
+  const reqSec = el('div', 'board-detail-section');
+  reqSec.append(el('strong', '', 'İSTEK:'), el('p', '', task.request));
+  body.append(reqSec);
+
+  // AJAN TALİMATI: Collapsed by default, toggled with Göster / Gizle
+  if (task.workerPrompt) {
+    const promptSec = el('div', 'board-detail-section');
+    const details = el('details');
+    const summary = el('summary', '', `▶ ${t('show')} ${t('taskInstruction')}`);
+    details.append(summary, el('p', '', task.workerPrompt));
+    details.addEventListener('toggle', () => {
+      summary.textContent = details.open
+        ? `▼ ${t('hide')} ${t('taskInstruction')}`
+        : `▶ ${t('show')} ${t('taskInstruction')}`;
+    });
+    promptSec.append(details);
+    body.append(promptSec);
+  }
+
+  if (task.status === 'needs_user') {
+    const qSec = el('div', 'board-detail-section');
+    qSec.append(el('strong', '', 'SORU:'), el('p', '', task.question || 'Cevap bekleniyor'));
+    const ansRow = el('div', 'board-composer');
+    const ansInput = el('input', 'board-input');
+    ansInput.placeholder = t('userAnswerPlaceholder');
+    const sendBtn = button(t('btnSendAnswer'), async () => {
+      if (!ansInput.value.trim()) return;
+      await api.answerBoardTask({ taskId: task.id, text: ansInput.value.trim() });
+    }, 'btn btn-accent');
+    ansRow.append(ansInput, sendBtn);
+    qSec.append(ansRow);
+    body.append(qSec);
+  }
+
+  if (task.result) {
+    let cleanResult = task.result;
+    try {
+      const parsed = JSON.parse(task.result.trim());
+      if (parsed && typeof parsed === 'object') {
+        cleanResult = parsed.result || parsed.message || parsed.summary || task.result;
+      }
+    } catch {}
+    const resSec = el('div', 'board-detail-section');
+    resSec.append(el('strong', '', 'SONUÇ:'), el('div', 'output-block', cleanResult));
+    body.append(resSec);
+  }
+
+  const streamText = boardStreams.get(task.id);
+  if (streamText) {
+    const streamSec = el('div', 'board-detail-section');
+    const details = el('details');
+    // Open only while task is running or planning
+    const isLive = ['running', 'planning', 'review'].includes(task.status);
+    details.open = isLive;
+    const summary = el('summary', '', `${details.open ? '▼' : '▶'} ${t('taskLiveOutput')}`);
+    details.append(summary, el('div', 'output-block', streamText));
+    details.addEventListener('toggle', () => {
+      summary.textContent = `${details.open ? '▼' : '▶'} ${t('taskLiveOutput')}`;
+    });
+    streamSec.append(details);
+    body.append(streamSec);
+  }
+
+  if (task.history?.length) {
+    const histSec = el('div', 'board-detail-section');
+    const details = el('details');
+    details.open = false; // Collapsed by default for cleaner UX
+    const summary = el('summary', '', `▶ ${t('taskHistory')} (${task.history.length})`);
+    const histBox = el('div', 'terminal-window selectable');
+    for (const h of task.history) {
+      const line = el('div', 'terminal-line');
+      const timeStr = new Date(h.at).toLocaleTimeString();
+      line.append(el('span', 'timeline-time', timeStr), el('span', 'log-text', ` [${h.type}] ${h.text}`));
+      histBox.append(line);
+    }
+    details.append(summary, histBox);
+    details.addEventListener('toggle', () => {
+      summary.textContent = `${details.open ? '▼' : '▶'} ${t('taskHistory')} (${task.history.length})`;
+    });
+    histSec.append(details);
+    body.append(histSec);
+  }
+
+  const actRow = el('div', 'board-detail-actions');
+  if (task.status === 'ready_to_merge') {
+    const mergeBtn = button(t('btnMerge'), async () => {
+      const res = await api.mergeBoardTask({ taskId: task.id });
+      if (res.ok) {
+        notice(t('status_merged'));
+      } else if (res.reason === 'dirty') {
+        notice(t('mergeDirtyWarning'));
+      } else if (res.reason === 'conflict') {
+        notice(t('status_needs_user'));
+      }
+    }, 'btn btn-accent');
+    actRow.append(mergeBtn);
+  }
+
+  if (task.status === 'failed') {
+    const retryBtn = button(t('btnRetry'), async () => {
+      await api.retryBoardTask({ taskId: task.id });
+    }, 'btn btn-secondary');
+    actRow.append(retryBtn);
+  }
+
+  if (['queued', 'planning', 'running', 'waiting_quota', 'needs_user', 'review'].includes(task.status)) {
+    const cancelBtn = button(t('btnCancel'), async () => {
+      await api.cancelBoardTask({ taskId: task.id });
+    }, 'btn btn-secondary');
+    actRow.append(cancelBtn);
+  }
+
+  body.append(actRow);
+}
+
+async function loadBoard() {
+  try {
+    boardTasks = await api.listBoard();
+    renderBoard();
+  } catch {}
+}
+
+api.onBoardChanged(payload => {
+  if (payload.tasks) {
+    boardTasks = payload.tasks;
+    renderBoard();
+  }
+});
+
+api.onBoardStream(payload => {
+  if (!payload.taskId || !payload.chunk) return;
+  const current = boardStreams.get(payload.taskId) || '';
+  const addition = typeof payload.chunk === 'string' ? payload.chunk : (payload.chunk.text || '');
+  boardStreams.set(payload.taskId, (current + addition).slice(-20000));
+  if (selectedBoardTaskId === payload.taskId) {
+    renderBoardDetail(selectedBoardTaskId);
+  }
+});
+
+$('boardAddBtn')?.addEventListener('click', () => perform(async () => {
+  const input = $('boardTaskInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  await api.addBoardTask({ request: text });
+}));
+
+$('boardDetailCloseBtn')?.addEventListener('click', () => {
+  selectedBoardTaskId = null;
+  $('boardDetailModal').hidden = true;
+  renderBoard();
+});
+
 window.addEventListener('DOMContentLoaded', () => perform(async () => {
   [state, models, settings, project] = await Promise.all([api.getState(), api.getModels(), api.getSettings(), api.getWorkspace()]);
-  applyRunOptions(settings); await setLanguage('tr'); await refreshHistory(); await loadMemory();
+  applyRunOptions(settings); await setLanguage('tr'); await refreshHistory(); await loadMemory(); await loadBoard();
   if (project.error) notice(t('projectUnavailable') + ' ' + project.error);
 }));
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') { event.preventDefault(); newSession(); $('promptInput').focus(); }
-  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && document.activeElement === $('promptInput')) { event.preventDefault(); perform(runSession); }
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && document.activeElement === $('promptInput')) { event.preventDefault(); perform(submitTask); }
 });

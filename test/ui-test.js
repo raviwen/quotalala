@@ -54,12 +54,16 @@ const handlers = {
   'state:get': () => health.snapshot(), 'health:run': id => health.run(id),
   'settings:get': () => store.getSettings(), 'settings:save': changes => { const settings = store.saveSettings(changes); state.agents.gemini.enabled = settings.geminiEnabled; health.publish(); return settings; },
   'models:get': () => [{ agent: 'claude', name: 'mock-light', source: 'mock', level: 'hafif', cost: 1 }],
+  'models:save': list => { return true; },
   'workspace:get': () => workspace.get(), 'workspace:open': cwd => workspace.open(cwd || process.cwd()),
   'sessions:list': () => store.list(workspace.get().cwd), 'sessions:open': id => store.open(id), 'sessions:rename': ({ id, title }) => store.rename(id, title),
   'memory:get': cwd => store.memory(cwd || process.cwd()), 'memory:save': ({ cwd, summary }) => store.saveMemory(cwd, summary, true),
   'session:cancel': () => runner.cancel(), 'session:approve': data => runner.approvePlan(data),
   'session:run': data => runner.run({ ...data, cwd: workspace.requireProject() }), 'clipboard:copy': text => clipboard.writeText(text),
-  'language:set': () => {}, 'text:menu': () => { selectMenuRequested = true; emit('text:select-all', {}); }
+  'language:set': () => {}, 'text:menu': () => { selectMenuRequested = true; emit('text:select-all', {}); },
+  'board:list': () => [{ id: 'task-mock-1', title: 'Mock Task 1', request: 'Mock request', status: 'queued', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), history: [{ at: new Date().toISOString(), type: 'status', text: 'Görev kuyruğa eklendi' }] }],
+  'board:add': ({ request }) => ({ id: 'task-mock-2', title: request, request, status: 'queued', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), history: [] }),
+  'board:answer': () => {}, 'board:cancel': () => {}, 'board:merge': () => ({ ok: true }), 'board:retry': () => {}
 };
 for (const [name, handler] of Object.entries(handlers)) ipcMain.handle(name, (event, ...args) => handler(...args));
 async function js(code) { return win.webContents.executeJavaScript(code); }
@@ -85,6 +89,17 @@ app.whenReady().then(async () => {
     await js("document.getElementById('notificationsInput').checked=false; document.getElementById('notificationsInput').dispatchEvent(new Event('change'))");
     for (let i=0;i<50 && store.getSettings().notificationsEnabled;i++) await new Promise(resolve=>setTimeout(resolve,10));
     assert.equal(store.getSettings().notificationsEnabled, false);
+    assert.equal(await js("document.querySelectorAll('#modelsTableBody tr').length >= 1"), true);
+    await js("document.getElementById('addModelRowBtn').click()");
+    assert.equal(await js("document.querySelectorAll('#modelsTableBody tr').length >= 2"), true);
+    // Test validation failure with invalid model name
+    await js("document.querySelector('#modelsTableBody tr:last-child .model-name-input').value = 'invalid name with spaces'; document.getElementById('saveModelsBtn').click()");
+    assert.equal(await js("document.querySelector('#modelsTableBody tr:last-child').classList.contains('row-error')"), true);
+    assert.equal(await js("document.getElementById('modelsTableError').hidden"), false);
+    // Fix the error and save
+    await js("document.querySelector('#modelsTableBody tr:last-child .model-name-input').value = 'valid-name'; document.getElementById('saveModelsBtn').click()");
+    await until("document.getElementById('notice').textContent.includes('kaydedildi')");
+    assert.equal(await js("document.getElementById('modelsTableError').hidden"), true);
     await js("document.getElementById('closeSettingsBtn').click()");
     assert.equal(await js("document.getElementById('projectName').textContent"), path.basename(process.cwd()));
     assert.equal(await js("document.getElementById('cwdInput').type"), 'hidden');
@@ -114,9 +129,9 @@ app.whenReady().then(async () => {
     await js("document.getElementById('terminalWindow').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
     await until("window.getSelection().toString().includes('login required')"); assert.equal(selectMenuRequested, true);
     await js("document.querySelector('[data-level=all]').click(); document.getElementById('agentFilter').value='all'; document.getElementById('agentFilter').dispatchEvent(new Event('change'))");
-    await js(`document.getElementById('cwdInput').value=${JSON.stringify(process.cwd())}; document.getElementById('promptInput').value='OK'; document.getElementById('planAndExecuteBtn').click()`);
+    await js(`document.getElementById('cwdInput').value=${JSON.stringify(process.cwd())}; document.getElementById('promptInput').value='OK'; perform(runSession)`);
     await until("document.querySelector('.history-open') !== null && document.getElementById('notice').textContent.includes('kaydedildi')");
-    await until("!busy && document.getElementById('planAndExecuteBtn').textContent.includes('Görevi başlat')");
+    await until("!busy && document.getElementById('planAndExecuteBtn').textContent.includes('Ekle')");
     assert.equal(store.list().length, 1); assert.match(store.memory(process.cwd()).summary, /Recent work/);
     await js("document.querySelector('[data-tab=liveStreamTab]').click()");
     assert.equal(await js("document.querySelectorAll('#streamContainer img, #streamContainer script').length"), 0);
@@ -160,12 +175,12 @@ app.whenReady().then(async () => {
     await js("newSession(); document.querySelector('[data-tab=liveStreamTab]').click(); window.getSelection().removeAllRanges(); window.scrollTo(0,0); document.getElementById('notice').textContent=''");
     await new Promise(resolve => setTimeout(resolve, 200));
     const beforeApproval = workerCalls;
-    await js("newSession(); document.getElementById('previewPlan').checked=true; document.getElementById('promptInput').value='approval fixture'; document.getElementById('planAndExecuteBtn').click()");
+    await js("newSession(); document.getElementById('previewPlan').checked=true; document.getElementById('promptInput').value='approval fixture'; perform(runSession)");
     await until("document.getElementById('planDialog').open"); assert.equal(workerCalls, beforeApproval);
     await js("document.querySelector('.plan-prompt').value='Edited in UI'; document.getElementById('approvePlanBtn').click()");
     await until("!busy && !document.getElementById('planDialog').open && !document.getElementById('planAndExecuteBtn').disabled"); assert.equal(workerCalls, beforeApproval + 1);
     assert.equal(store.open(store.list()[0].id).turns[0].plan.subtasks[0].prompt, 'Edited in UI');
-    await js("newSession(); document.getElementById('previewPlan').checked=false; document.getElementById('promptInput').value='cancel fixture'; document.getElementById('planAndExecuteBtn').click()");
+    await js("newSession(); document.getElementById('previewPlan').checked=false; document.getElementById('promptInput').value='cancel fixture'; perform(runSession)");
     await until("document.getElementById('streamContainer').textContent.includes('LIVE PARTIAL')");
     assert.equal(await js("document.getElementById('stopBtn').disabled"), false);
     await js("document.getElementById('stopBtn').click()");
@@ -177,14 +192,35 @@ app.whenReady().then(async () => {
     assert.equal(await js("document.getElementById('previewPlan').disabled && document.getElementById('verifyRun').disabled"), true);
     assert.equal(await js("document.querySelector('#directAgent option[value=gemini]').disabled"), true);
     await js("document.getElementById('runMode').value='coordinated'; renderState()");
-    await until("!busy && !document.getElementById('planAndExecuteBtn').disabled");
-    await js("newSession(); document.getElementById('agentCardsDetails').open=false; window.scrollTo(0,0)");
+    await js("document.querySelector('[data-tab=boardTab]').click()");
+    await until("document.getElementById('board-task-task-mock-1') !== null");
+    assert.equal(await js("document.getElementById('board-task-task-mock-1').querySelector('.board-card-title').textContent"), 'Mock Task 1');
+
+    // Test detail view layout: title once, subline with status, request, and collapsed worker prompt
+    await js("boardTasks = [{ id: 'task-detail-1', title: 'Detail Test Task', request: 'Original user request', workerPrompt: 'Claude worker instruction', status: 'running', agent: 'claude', level: 'hafif', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), history: [] }]; renderBoard(); document.getElementById('board-task-task-detail-1').click()");
+    await until("!document.getElementById('boardDetailModal').hidden");
+    assert.equal(await js("document.getElementById('boardDetailTitle').textContent"), 'Detail Test Task');
+    assert.equal(await js("document.querySelector('.board-detail-subline').textContent.includes('CLAUDE • hafif')"), true);
+    assert.equal(await js("document.querySelector('.board-detail-section details') !== null"), true);
+    assert.equal(await js("document.querySelector('.board-detail-section details').open"), false);
+    assert.match(await js("document.querySelector('.board-detail-section details summary').textContent"), /Göster/);
+
+    // Test unified entry via promptInput + planAndExecuteBtn
+    await js("document.getElementById('promptInput').value = 'New Unified Task'; document.getElementById('planAndExecuteBtn').click()");
+    await until("document.getElementById('promptInput').value === ''");
+
+    // Test quota warning when selected agent is limited
+    await js("state.agents.codex.status = 'limited'; renderState()");
+    assert.equal(await js("document.getElementById('agentQuotaWarning').hidden"), false);
+    await js("state.agents.codex.status = 'idle'; renderState()");
+    assert.equal(await js("document.getElementById('agentQuotaWarning').hidden"), true);
+
     const image = await win.webContents.capturePage(); fs.writeFileSync(path.join(root, 'ui.png'), image.toPNG());
     win.setSize(1050, 900);
     await new Promise(resolve => setTimeout(resolve, 200));
     assert.equal(await js("document.documentElement.scrollWidth <= window.innerWidth"), true);
     const narrow = await win.webContents.capturePage(); fs.writeFileSync(path.join(root, 'ui-narrow.png'), narrow.toPNG());
-    console.log('PASS: active workspace, hidden project path, health state/spinner, disabled Gemini, mock E2E/history/memory, combined filters, error cards, raw/row/all copy, selection/context menu, safe output rendering, activity timeline details/persistence, TR/EN.');
+    console.log('PASS: active workspace, hidden project path, health state/spinner, disabled Gemini, mock E2E/history/memory, combined filters, error cards, raw/row/all copy, selection/context menu, safe output rendering, activity timeline details/persistence, TR/EN, unified task entry, task details, quota warning.');
     console.log('Screenshot: ' + path.join(root, 'ui.png')); app.exit(0);
   } catch (error) { console.error(error); app.exit(1); }
 });
