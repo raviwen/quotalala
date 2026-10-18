@@ -38,7 +38,7 @@ function showRoomMessage(message, focus = true) {
 function renderRoom() {
   roomView ||= new TeamRoomView({ scene: $('roomScene'), t, onInspect: showRoomMessage, onDetails: showAgentDetails });
   const turn = roomTurnId ? viewedTurns.find(item => item.id === roomTurnId) || viewedTurns.at(-1) : viewedTurns.at(-1);
-  roomView.update(TeamRoomModel.project({ agents: state.agents, turn, live: busy && turn === viewedTurns.at(-1), approval: !!pendingApproval }));
+  roomView.update(TeamRoomModel.project({ agents: state.agents, turn, live: busy && turn === viewedTurns.at(-1), approval: !!pendingApproval, boardTasks }));
   $('roomBody').hidden = roomCollapsed; $('toggleRoomBtn').textContent = t(roomCollapsed ? 'roomExpand' : 'roomCollapse'); $('toggleRoomBtn').setAttribute('aria-expanded', String(!roomCollapsed));
 }
 function resetRoomSelection() { roomTurnId = null; inspectedMessage = null; $('roomMessageDetails').hidden = true; }
@@ -1026,6 +1026,7 @@ async function loadBoard() {
   try {
     boardTasks = await api.listBoard();
     renderBoard();
+    renderRoom();
   } catch {}
 }
 
@@ -1033,6 +1034,7 @@ api.onBoardChanged(payload => {
   if (payload.tasks) {
     boardTasks = payload.tasks;
     renderBoard();
+    renderRoom();
   }
 });
 

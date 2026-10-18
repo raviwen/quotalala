@@ -1,6 +1,6 @@
 {
   "name": "quotalala",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Desktop AI quota & coordination manager for Claude, Codex, and Gemini",
   "main": "src/main/main.js",
   "bin": {

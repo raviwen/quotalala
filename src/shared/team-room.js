@@ -1,9 +1,13 @@
 (function (root) {
   const ids = ['claude', 'codex', 'gemini'];
   const messages = new Set(['agent_question', 'coordinator_reply', 'output_transferred']);
-  function project({ agents = {}, turn = null, live = false, approval = false } = {}) {
+  function project({ agents = {}, turn = null, live = false, approval = false, boardTasks = [] } = {}) {
     const desks = Object.fromEntries(ids.map(id => [id, { id, enabled: agents[id]?.enabled === true, status: 'idle', taskTitle: '', message: null, participated: false }]));
     let lastMessage = null, ended = null;
+
+    // Check active board tasks
+    const activeBoardTasks = (boardTasks || []).filter(t => ['planning', 'running', 'review', 'needs_user'].includes(t.status));
+    const boardIsActive = activeBoardTasks.length > 0;
     for (const event of turn?.activities || []) {
       const desk = desks[event.agent];
       if (event.type === 'session_started' && turn.options?.mode !== 'economic') { desks.claude.status = 'coordinating'; desks.claude.participated = true; }
@@ -48,8 +52,66 @@
       }
       desk.animated = active && ['working', 'coordinating'].includes(desk.status);
     }
-    return { desks: ids.map(id => desks[id]), lastMessage, active, archive: !!turn && !live, approval: active && approval,
-      status: active ? approval ? 'approval' : 'live' : turn ? status || 'archive' : 'idle' };
+
+    // Overlay board tasks when room is otherwise idle or when board tasks are running
+    if (!live && boardIsActive) {
+      for (const bt of activeBoardTasks) {
+        if (bt.status === 'planning' || bt.status === 'review') {
+          if (desks.claude && desks.claude.enabled) {
+            desks.claude.status = 'coordinating';
+            desks.claude.animated = true;
+            desks.claude.taskTitle = bt.title || bt.request?.slice(0, 40) || '';
+            const msg = {
+              id: 'board-plan-' + bt.id,
+              type: 'coordinator_decision',
+              from: 'claude',
+              to: 'codex',
+              text: bt.status === 'planning' ? 'Görevi inceliyorum ve planlıyorum...' : 'Sonuçları kontrol ediyorum...',
+              taskTitle: desks.claude.taskTitle
+            };
+            desks.claude.message = msg;
+            lastMessage = msg;
+          }
+        } else if (bt.status === 'running') {
+          const workerAgent = bt.agent && desks[bt.agent] ? bt.agent : 'codex';
+          if (desks[workerAgent] && desks[workerAgent].enabled) {
+            desks[workerAgent].status = 'working';
+            desks[workerAgent].animated = true;
+            desks[workerAgent].taskTitle = bt.title || bt.request?.slice(0, 40) || '';
+            const msg = {
+              id: 'board-run-' + bt.id,
+              type: 'output_transferred',
+              from: workerAgent,
+              to: 'claude',
+              text: bt.title ? `${bt.title} üzerinde çalışıyorum...` : 'Görevi yerine getiriyorum...',
+              taskTitle: desks[workerAgent].taskTitle
+            };
+            desks[workerAgent].message = msg;
+            lastMessage = msg;
+          }
+        } else if (bt.status === 'needs_user') {
+          const workerAgent = bt.agent && desks[bt.agent] ? bt.agent : 'claude';
+          if (desks[workerAgent] && desks[workerAgent].enabled) {
+            desks[workerAgent].status = 'waiting';
+            desks[workerAgent].animated = false;
+            const msg = {
+              id: 'board-q-' + bt.id,
+              type: 'agent_question',
+              from: workerAgent,
+              to: 'claude',
+              text: bt.question || 'Kullanıcıdan cevap bekleniyor.',
+              taskTitle: bt.title || ''
+            };
+            desks[workerAgent].message = msg;
+            lastMessage = msg;
+          }
+        }
+      }
+    }
+
+    const effectiveActive = active || (!live && boardIsActive);
+    return { desks: ids.map(id => desks[id]), lastMessage, active: effectiveActive, archive: !!turn && !live && !boardIsActive, approval: active && approval,
+      status: effectiveActive ? (approval ? 'approval' : 'live') : (turn ? status || 'archive' : 'idle') };
   }
   const api = { project, ids };
   if (typeof module !== 'undefined') module.exports = api;
