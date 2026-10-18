@@ -12,6 +12,15 @@
 
 Quotalala is a local Electron desktop app that coordinates your authenticated AI CLIs. Open it from your project, write one prompt, and let Claude plan the work, assign tasks and review the results. That project's saved conversations and memory load automatically.
 
+## What is new in 1.2.0
+
+- **Task Board & Concurrent Execution:** Background queue running up to 2 concurrent worker tasks. Claude plans each intake request, delegates to the right agent, and reviews output.
+- **Isolated Git Worktrees & Safe Merging:** Tasks run in isolated branches under `~/.quotalala/worktrees/`. `git merge-tree` performs in-memory verification; safe merging succeeds even with uncommitted working files if modified files do not collide.
+- **Model Catalog & Thinking Effort:** Support for Opus, Sonnet, GPT-6.1 Sol / Luna / Astra, and custom reasoning effort (`none`, `low`, `medium`, `high`, `max`).
+- **Resilient Quota Management:** 429 quota exhaustion pauses the task in the same session until reset without agent swapping.
+
+See [release notes](CHANGELOG.md). Update with `npx quotalala@latest` or `npm install -g quotalala@latest`.
+
 ## What is new in 1.1.0
 
 Claude manages follow-up questions, consultations and focused revisions. The team room shows real task events without extra agent calls.

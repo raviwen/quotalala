@@ -12,15 +12,16 @@
 
 Quotalala, kendi hesabınla giriş yaptığın yapay zekâ CLI araçlarını birlikte çalıştıran yerel bir Electron masaüstü uygulamasıdır. Projenin içinde aç, tek bir prompt yaz; Claude işi planlasın, görevleri dağıtsın ve sonuçları kontrol etsin. O projeye ait kayıtlı konuşmalar ve hafıza otomatik yüklenir.
 
+## 1.2.0 ile gelenler
+
+- **Task Board (Görev Panosu):** Arka planda aynı anda 2 görevi eşzamanlı çalıştırabilen kuyruk yönetimi. Claude her görevi önce inceler, uygun ajana atar ve tamamlanınca çıktıyı onaylar.
+- **İzole Git Worktree & Akıllı Birleştirme:** Görevler `~/.quotalala/worktrees/` altında ayrı dallarda izole çalışır. `git merge-tree` ile bellekte kuru test yapılır; çalışma dizininde kaydedilmemiş dosyaların olsa bile kesişmeyen dosyalar doğrudan ve güvenle birleştirilir.
+- **Model ve Düşünme Seviyesi (Thinking Effort):** Opus, Sonnet, GPT-6.1 Sol / Luna / Astra ve düşünme seviyesi (`none`, `low`, `medium`, `high`, `max`) ayarları.
+- **Kesintisiz Kota Güvencesi:** Ajan kotası dolduğunda oturum veya ajan değiştirilmez; süre dolana kadar aynı oturumda güvenle bekletilir.
+
+[Sürüm notları](CHANGELOG.md). Güncellemek için `npx quotalala@latest` veya `npm install -g quotalala@latest` kullan.
+
 ## 1.1.0 ile gelenler
-
-Claude artık takip sorularını yanıtlıyor, ajanlara danışıyor ve somut düzeltme görevleri veriyor. Ekip odası ek ajan çağrısı yapmadan gerçek görev olaylarını gösteriyor.
-
-Ekonomik mod, düzenlenebilir plan onayı, canlı çıktı, Durdur, ayarlanabilir zaman aşımı ve eksik adımdan devam etme eklendi. Sonuçlarda ajan beyanı ile gözlemlenen kanıt ayrılıyor.
-
-Koordinasyon en fazla 3 yönetim turu, 8 görev, görev başına 2 deneme ve çalışma başına 20 prompt çağrısıyla sınırlı. Kullanım sayaçları yerel etkinlik kaydıdır; token sayısı veya abonelikte kalan kesin kota değildir.
-
-[Sürüm notları](CHANGELOG.md). Güncellemek için `npx quotalala@latest` veya `npm install -g quotalala@latest` kullan. Bu özellikler 1.1.0 ve üzerini gerektirir; npm 1.0.0 önceki özellikleri içerir. Uygulama içinden otomatik güncelleme kurulmaz.
 
 ## Ekran görüntüleri
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.0 — 2026-10-18
+
+### Task Board & Concurrent Execution
+- Background task board running up to 2 concurrent worker tasks with automatic queue management.
+- Claude acts as intake planner and final reviewer for each card.
+
+### Isolated Git Worktrees & Smart In-Memory Merging
+- Work is isolated in dedicated git worktrees (`quotalala/<hash>`) under `~/.quotalala/worktrees/`.
+- In-memory dry runs via `git merge-tree` verify mergeability before touching the working directory.
+- Merges are allowed even with uncommitted working files as long as files do not intersect. Collisions safely pause for user action without data loss.
+
+### Model Catalog & Thinking Controls
+- Support for Claude 3.7 Sonnet / Opus, GPT-6.1 Sol / Luna / Astra, and custom reasoning/thinking levels (`none`, `low`, `medium`, `high`, `max`).
+- Dropdown coordinator model selection in application settings.
+- 429 quota exhaustion keeps the task and session preserved until reset time without agent swapping.
+
 ## 1.1.0 — 2026-10-15
 
 ### Claude-led teamwork
