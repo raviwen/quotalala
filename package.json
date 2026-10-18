@@ -1,8 +1,11 @@
 {
   "name": "quotalala",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Desktop AI quota & coordination manager for Claude, Codex, and Gemini",
   "main": "src/main/main.js",
+  "bin": {
+    "quotalala": "bin/quotalala.js"
+  },
   "scripts": {
     "start": "electron .",
     "test": "node --test test/unit.test.js test/execution.test.js test/team.test.js test/room.test.js test/board.test.js test/worktree.test.js test/board-runner.test.js test/board-quota.test.js",
