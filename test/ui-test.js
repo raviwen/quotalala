@@ -21,7 +21,7 @@ const state = { agents: {
   codex: { id: 'codex', name: 'ChatGPT / Codex', enabled: true, status: 'idle', jobsCompleted: 0 },
   gemini: { id: 'gemini', name: 'Google Gemini', enabled: false, status: 'idle', jobsCompleted: 0 }
 } };
-let workerCalls = 0;
+let workerCalls = 0, approveCalls = [];
 let win, selectMenuRequested = false;
 const emit = (channel, data) => win.webContents.send(channel, data);
 const health = new HealthService({
@@ -63,7 +63,7 @@ const handlers = {
   'language:set': () => {}, 'text:menu': () => { selectMenuRequested = true; emit('text:select-all', {}); },
   'board:list': () => [{ id: 'task-mock-1', title: 'Mock Task 1', request: 'Mock request', status: 'queued', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), history: [{ at: new Date().toISOString(), type: 'status', text: 'Görev kuyruğa eklendi' }] }],
   'board:add': ({ request }) => ({ id: 'task-mock-2', title: request, request, status: 'queued', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), history: [] }),
-  'board:answer': () => {}, 'board:cancel': () => {}, 'board:merge': () => ({ ok: true }), 'board:retry': () => {}
+  'board:answer': () => {}, 'board:approve': ({ taskId, plan }) => { approveCalls.push({ taskId, plan }); return { id: taskId, status: 'queued' }; }, 'board:cancel': () => {}, 'board:merge': () => ({ ok: true }), 'board:retry': () => {}
 };
 for (const [name, handler] of Object.entries(handlers)) ipcMain.handle(name, (event, ...args) => handler(...args));
 async function js(code) { return win.webContents.executeJavaScript(code); }
@@ -218,6 +218,19 @@ app.whenReady().then(async () => {
     await until("document.getElementById('boardDetailBody').textContent.includes('snapshot two')");
     assert.equal(await js("document.getElementById('boardDetailBody').textContent.includes('snapshot one')"), false);
 
+    // Plan approval: a parked board task shows the editable plan, and the
+    // decision carries the edited agent, level and worker prompt back.
+    await js("boardTasks = [{ id: 'task-approval-1', title: 'Approval Test Task', request: 'Original request', workerPrompt: 'Claude plan prompt', status: 'awaiting_approval', agent: 'claude', level: 'orta', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), history: [{ at: new Date().toISOString(), type: 'status', text: 'Plan hazır, onayını bekliyor' }] }]; renderBoard(); renderRoom(); document.getElementById('board-task-task-approval-1').click()");
+    await until("document.getElementById('boardDetailModal').hidden === false");
+    assert.equal(await js("document.querySelector('.board-detail-subline').textContent.includes('Plan onayını bekliyor')"), true);
+    assert.equal(await js("document.querySelector('.board-plan-prompt').value"), 'Claude plan prompt');
+    assert.equal(await js("document.querySelectorAll('.board-plan-field select')[0].value"), 'claude');
+    assert.equal(await js("[...document.querySelectorAll('.board-plan-field select option')].some(option => option.value === 'gemini')"), false);
+    assert.equal(await js("document.getElementById('room-claude').dataset.status"), 'approval');
+    await js("const planSelects = document.querySelectorAll('.board-plan-field select'); planSelects[0].value='codex'; planSelects[1].value='güçlü'; document.querySelector('.board-plan-prompt').value='Edited plan prompt'; document.querySelector('#boardDetailBody .btn-accent').click()");
+    await until("document.getElementById('notice').textContent.includes('Plan onaylandı')");
+    assert.deepEqual(approveCalls, [{ taskId: 'task-approval-1', plan: { agent: 'codex', level: 'güçlü', workerPrompt: 'Edited plan prompt' } }]);
+
     // Test unified entry via promptInput + planAndExecuteBtn
     await js("document.getElementById('promptInput').value = 'New Unified Task'; document.getElementById('planAndExecuteBtn').click()");
     await until("document.getElementById('promptInput').value === ''");
@@ -233,7 +246,7 @@ app.whenReady().then(async () => {
     await new Promise(resolve => setTimeout(resolve, 200));
     assert.equal(await js("document.documentElement.scrollWidth <= window.innerWidth"), true);
     const narrow = await win.webContents.capturePage(); fs.writeFileSync(path.join(root, 'ui-narrow.png'), narrow.toPNG());
-    console.log('PASS: active workspace, hidden project path, health state/spinner, disabled Gemini, mock E2E/history/memory, combined filters, error cards, raw/row/all copy, selection/context menu, safe output rendering, activity timeline details/persistence, TR/EN, unified task entry, task details, quota warning.');
+    console.log('PASS: active workspace, hidden project path, health state/spinner, disabled Gemini, mock E2E/history/memory, combined filters, error cards, raw/row/all copy, selection/context menu, safe output rendering, activity timeline details/persistence, TR/EN, unified task entry, task details, plan approval, quota warning.');
     console.log('Screenshot: ' + path.join(root, 'ui.png')); app.exit(0);
   } catch (error) { console.error(error); app.exit(1); }
 });

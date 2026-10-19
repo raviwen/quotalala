@@ -16,6 +16,7 @@ Quotalala ist eine lokale Electron-Desktop-App, die deine bereits angemeldeten K
 
 - **Sitzungsfortsetzung:** Eine Rückfrage läuft in derselben CLI-Sitzung weiter und sendet nur die neue Anweisung, statt Ziel, Speicher und frühere Ergebnisse zu wiederholen. Die Koordinator-Sitzung wird ebenso fortgesetzt.
 - **Konfigurierbare Aufgabenbudgets:** Teilaufgaben, Versuche, Antwortrunden, Koordinationsrunden und das Aufruflimit pro Durchlauf sind in den Einstellungen editierbar und auf sichere Bereiche begrenzt.
+- **Planfreigabe im Board:** Ist „Plan vor der Ausführung anzeigen“ aktiv, wartet eine geplante Aufgabe auf deine Entscheidung; deine Änderungen an Agent, Stufe oder Anweisung erhält der Worker genau so.
 - **Genauere Kontingentlogik:** Nur ein echtes Kontingentlimit pausiert eine Aufgabe. Fehlende CLI, abgemeldetes Konto oder ein harter Agentenfehler lassen sie fehlschlagen; vorübergehendes „capacity“/„overloaded“ wartet nicht mehr 30 Minuten.
 - **Sichere Standardwerte:** Das Koordinator-Modell ist standardmäßig Sonnet statt des stärksten Modells; Tray- und Denkstufen-Beschriftungen folgen der Oberflächensprache.
 - **Oberflächenkorrekturen:** Das Budget-Raster in den Einstellungen läuft nicht mehr über, Modellspalten bleiben lesbar, das Statusabzeichen sitzt bei Agent und Branch, und Teamraum-Sprechblasen zeigen keine rohen Prozesszeilen mehr.

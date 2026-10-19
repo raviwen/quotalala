@@ -16,6 +16,7 @@ Quotalala, kendi hesabınla giriş yaptığın yapay zekâ CLI araçlarını bir
 
 - **Oturum devam ettirme:** Yanıt turu aynı CLI oturumunda sürer ve yalnızca yeni talimat gönderilir; hedef, hafıza ve önceki sonuçlar tekrar gönderilmez. Koordinatör oturumu da aynı şekilde sürdürülür.
 - **Yapılandırılabilir görev bütçeleri:** Alt görev, deneme, yanıt turu, yönetim turu ve çalışma başına çağrı sınırı Ayarlar'dan düzenlenir ve güvenli aralıklara kırpılır.
+- **Pano plan onayı:** “Çalıştırmadan önce planı göster” açıkken planlanan görev kararını bekler; ajan, seviye veya talimat üzerinde yaptığın düzenlemeler ajana aynen gider.
 - **Netleşen kota mantığı:** Yalnızca gerçek kota sınırı görevi bekletir. CLI yokluğu, giriş yapılmamış hesap veya ağır ajan hatası görevi başarısız sayar; geçici "capacity"/"overloaded" yanıtı 30 dakika beklemez.
 - **Güvenli varsayılanlar:** Koordinatör modeli en güçlü model yerine Sonnet; tepsi ve düşünme seviyesi etiketleri arayüz dilini izler.
 - **Arayüz düzeltmeleri:** Ayarlar'daki bütçe ızgarası taşmaz, model tablosu sütunları okunur kalır, pano durum rozeti ajan ve dal bilgisiyle aynı hizada durur ve ekip odası balonlarına ham süreç başlığı sızmaz.

@@ -71,11 +71,13 @@ function emit(channel, payload) {
   taskNotifications?.consume(channel, payload);
   if (channel === 'board:changed' && payload.taskId) {
     const task = payload.tasks?.find(t => t.id === payload.taskId);
-    if (task && (task.status === 'needs_user' || task.status === 'ready_to_merge')) {
+    if (task && (task.status === 'needs_user' || task.status === 'ready_to_merge' || task.status === 'awaiting_approval')) {
       const isTR = language === 'tr';
       const title = task.status === 'needs_user'
         ? (isTR ? 'Senden cevap bekleniyor' : 'Your answer is needed')
-        : (isTR ? 'Birleştirmeye hazır' : 'Ready to merge');
+        : task.status === 'awaiting_approval'
+          ? (isTR ? 'Görev planı onayını bekliyor' : 'A task plan is awaiting approval')
+          : (isTR ? 'Birleştirmeye hazır' : 'Ready to merge');
       const body = task.title || task.request?.slice(0, 50) || '';
       notify(title, body, () => {
         mainWindow?.show();
@@ -216,6 +218,12 @@ register('board:answer', async ({ taskId, text }) => {
   const curProject = workspace.requireProject();
   const br = getBoardRunner(curProject);
   await br.answer(taskId, text);
+  return br.board.get(taskId);
+});
+register('board:approve', async ({ taskId, plan }) => {
+  const curProject = workspace.requireProject();
+  const br = getBoardRunner(curProject);
+  await br.approve(taskId, plan || {});
   return br.board.get(taskId);
 });
 register('board:cancel', ({ taskId }) => {

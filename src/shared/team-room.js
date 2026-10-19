@@ -18,7 +18,7 @@
     let lastMessage = null, ended = null;
 
     // Check active board tasks
-    const activeBoardTasks = (boardTasks || []).filter(t => ['planning', 'running', 'review', 'needs_user'].includes(t.status));
+    const activeBoardTasks = (boardTasks || []).filter(t => ['planning', 'running', 'review', 'needs_user', 'awaiting_approval'].includes(t.status));
     const boardIsActive = activeBoardTasks.length > 0;
     for (const event of turn?.activities || []) {
       const desk = desks[event.agent];
@@ -101,6 +101,22 @@
               taskTitle: desks[workerAgent].taskTitle
             };
             desks[workerAgent].message = msg;
+            lastMessage = msg;
+          }
+        } else if (bt.status === 'awaiting_approval') {
+          if (desks.claude && desks.claude.enabled) {
+            desks.claude.status = 'approval';
+            desks.claude.animated = false;
+            desks.claude.taskTitle = bt.title || bt.request?.slice(0, 40) || '';
+            const msg = {
+              id: 'board-approval-' + bt.id,
+              type: 'coordinator_decision',
+              from: 'claude',
+              to: bt.agent && desks[bt.agent] ? bt.agent : 'codex',
+              text: 'Plan hazır, kullanıcı onayı bekleniyor...',
+              taskTitle: desks.claude.taskTitle
+            };
+            desks.claude.message = msg;
             lastMessage = msg;
           }
         } else if (bt.status === 'needs_user') {

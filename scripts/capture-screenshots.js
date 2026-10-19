@@ -17,9 +17,25 @@ const agents = Object.fromEntries(['claude', 'codex', 'gemini'].map(id => [id, {
   enabled: id !== 'gemini', status: 'idle', jobsCompleted: 0
 }]));
 const settings = { saveHistory: true, notificationsEnabled: true, mode: 'coordinated', timeout: 180000, previewPlan: true };
+const boardTask = {
+  id: 'board-demo-1',
+  title: 'Add status filters to the task tracker',
+  request: 'Add status filters to the task tracker and review the changed files.',
+  workerPrompt: 'Add status filters using the existing SQLite adapter. Keep the current project architecture and commit the change.',
+  status: 'awaiting_approval',
+  agent: 'codex',
+  level: 'orta',
+  createdAt: '2026-10-19T09:12:00.000Z',
+  updatedAt: '2026-10-19T09:12:41.000Z',
+  history: [
+    { at: '2026-10-19T09:12:00.000Z', type: 'status', text: 'Task queued' },
+    { at: '2026-10-19T09:12:41.000Z', type: 'status', text: 'Plan ready, waiting for your approval' }
+  ]
+};
 const handlers = {
   'state:get': () => ({ agents, healthRunning: false }), 'models:get': () => [],
   'settings:get': () => settings, 'workspace:get': () => project, 'sessions:list': () => [],
+  'board:list': () => [boardTask],
   'memory:get': () => ({ summary: 'Demo project: a local task tracker. Keep the existing SQLite adapter. Next: add task filters.' }),
   'language:set': () => {}
 };
@@ -57,11 +73,18 @@ app.whenReady().then(async () => {
     const bounds = await js("(() => { const r=document.getElementById('teamRoom').getBoundingClientRect(); return {x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)}; })()");
     fs.writeFileSync(path.join(output, 'team-room-tr.png'), (await win.webContents.capturePage(bounds)).toPNG());
     await js("setLanguage('en')");
-    win.webContents.send('session:approval', { runId: 'demo-approval', plan });
-    for (let i = 0; i < 100 && !await js("document.getElementById('planDialog').open"); i++) await new Promise(resolve => setTimeout(resolve, 30));
-    assert.equal(await js("document.querySelectorAll('#planEditor .step-card').length"), 2);
-    fs.writeFileSync(path.join(output, 'plan-approval-en.png'), (await win.webContents.capturePage()).toPNG());
-    console.log('PASS: 3 production UI screenshots, synthetic project and messages, zero CLI calls.');
+    // Board plan approval: the planned card waits for the user before the worker starts.
+    await js("document.querySelector('[data-tab=boardTab]').click()");
+    for (let i = 0; i < 100 && !await js("document.getElementById('board-task-board-demo-1') !== null"); i++) await new Promise(resolve => setTimeout(resolve, 30));
+    await js("document.getElementById('board-task-board-demo-1').click()");
+    for (let i = 0; i < 100 && !await js("document.querySelector('.board-plan-prompt') !== null"); i++) await new Promise(resolve => setTimeout(resolve, 30));
+    assert.equal(await js("document.querySelectorAll('.board-plan-field select').length"), 2);
+    await js("document.querySelector('.board-container').scrollIntoView({ block: 'center' })");
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const boardBounds = await js("(() => { const r = document.querySelector('.board-container').getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }; })()");
+    assert.ok(boardBounds.y >= 0 && boardBounds.height > 200, 'Board panel is not visible for the screenshot');
+    fs.writeFileSync(path.join(output, 'plan-approval-en.png'), (await win.webContents.capturePage(boardBounds)).toPNG());
+    console.log('PASS: 3 production UI screenshots, synthetic project, messages and board task, zero CLI calls.');
     app.exit(0);
   } catch (error) { console.error(error); app.exit(1); }
 });

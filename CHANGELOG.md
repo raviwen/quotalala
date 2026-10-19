@@ -9,6 +9,7 @@
 - Transient "capacity"/"overloaded" errors are no longer classified as quota, and the default renewal wait matches the board's 30 minutes.
 - Coordinator Claude model defaults to Sonnet instead of Opus (the strongest model is not the default).
 - Task budgets (subtasks, attempts, reply rounds, management rounds, calls) are configurable in Settings with safe clamping.
+- The task board honors "show plan before execution": a planned card waits for your decision, and your edits to agent, level or instructions are what the worker receives.
 - Board intake can use Gemini when the user has explicitly enabled it.
 - Tray status and thinking-level labels are localized; Linux CI job runs the source checks and full offline test suite.
 - Interface repairs: the Settings budget grid no longer overflows, model table columns stay readable, the board status badge sits with the agent and branch meta, and team room speech bubbles no longer leak raw process headers (`[process] PID …`); screenshots refreshed.

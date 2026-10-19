@@ -36,6 +36,12 @@
 .board-composer { display:flex; gap:10px; align-items:center; }
 .board-input { flex:1; background:#1b201c; border:1px solid #ffffff14; color:var(--text); padding:9px 12px; border-radius:7px; font-size:13px; }
 .board-input:focus { border-color:#bdd4b949; }
+.board-plan-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+.board-plan-field { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--muted); }
+.board-plan-field .board-input { flex:0 0 auto; min-width:120px; padding:7px 10px; }
+.board-plan-hint { font-size:11px; color:var(--dim); line-height:1.7; }
+.board-plan-prompt { width:100%; font:11px var(--mono); line-height:1.7; }
+.badge-awaiting_approval { background:#d5ba8124; color:var(--warning); border:1px solid #d5ba8155; }
 .board-list { display:grid; gap:10px; }
 .board-card { background:#1b201c; border:1px solid var(--line); border-radius:8px; padding:12px 14px; cursor:pointer; display:grid; gap:6px; }
 .board-card:hover { background:#1f2620; border-color:#ffffff1c; }

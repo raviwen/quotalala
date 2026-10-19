@@ -16,6 +16,7 @@ Quotalala est une application de bureau locale avec Electron qui coordonne vos C
 
 - **Reprise de session :** Une réponse se poursuit dans la même session CLI et n'envoie que la nouvelle instruction, sans répéter l'objectif, la mémoire et les résultats précédents. La session du coordinateur est reprise de la même façon.
 - **Budgets de tâche configurables :** Sous-tâches, tentatives, tours de réponse, tours de coordination et limite d'appels par exécution sont modifiables dans les Réglages et bornés à des plages sûres.
+- **Validation du plan dans le tableau :** Avec « Afficher le plan avant exécution » activé, une tâche planifiée attend votre décision ; vos modifications d'agent, de niveau ou d'instruction sont exactement ce que reçoit l'agent.
 - **Logique de quota affinée :** Seule une vraie limite de quota met la tâche en attente. Une CLI absente, un compte déconnecté ou une erreur grave de l'agent la font échouer, et « capacity »/« overloaded » temporaire n'attend plus 30 minutes.
 - **Valeurs par défaut sûres :** Le modèle du coordinateur est Sonnet plutôt que le plus puissant, et les libellés de la zone de notification et du niveau de réflexion suivent la langue de l'interface.
 - **Corrections d'interface :** La grille des budgets ne déborde plus, les colonnes du tableau des modèles restent lisibles, le badge d'état rejoint l'agent et la branche, et les bulles de la salle n'affichent plus les en-têtes de processus bruts.

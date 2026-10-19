@@ -70,6 +70,13 @@ class BoardRunner {
     } catch {}
   }
 
+  // Gemini stays out of the board unless the user explicitly enabled it (manual risk acceptance).
+  _allowedAgents() {
+    const allowed = ['claude', 'codex'];
+    if (quota.getAgent('gemini')?.enabled) allowed.push('gemini');
+    return allowed;
+  }
+
   async _runAgent(taskId, agent, prompt, options) {
     let output = this.board.get(taskId)?.liveOutput || '', saved = 0;
     const raw = new Map();
@@ -189,9 +196,7 @@ class BoardRunner {
       .slice(0, 20)
       .map(t => ({ title: t.title, status: t.status, agent: t.agent }));
 
-    // Gemini stays out of the board unless the user explicitly enabled it (manual risk acceptance).
-    const allowedAgents = ['claude', 'codex'];
-    if (quota.getAgent('gemini')?.enabled) allowedAgents.push('gemini');
+    const allowedAgents = this._allowedAgents();
     const agentStatuses = Object.fromEntries(allowedAgents.map(id => {
       const state = quota.getAgent(id);
       return [id, { enabled: state?.enabled, status: state?.status }];
@@ -278,6 +283,13 @@ class BoardRunner {
       level: planData.level,
       workerPrompt: planData.workerPrompt
     });
+
+    // Optional plan approval: park the task until the user confirms or edits the plan.
+    if (this.store.getSettings().previewPlan === true) {
+      this.board.setStatus(taskId, 'awaiting_approval', 'Plan hazır, onayını bekliyor');
+      this.emitChanged(taskId);
+      return;
+    }
 
     await this._executeWorker(taskId, signal);
   }
@@ -610,6 +622,43 @@ class BoardRunner {
         status: 'queued'
       });
     }
+    this.emitChanged(taskId);
+    await this.tick();
+  }
+
+  // The user either accepts Claude's plan as-is or sends back an edited one
+  // (agent, level, worker prompt, title). Nothing runs until this resolves.
+  async approve(taskId, plan = {}) {
+    const task = this.board.get(taskId);
+    if (!task || task.status !== 'awaiting_approval') {
+      throw new Error(`Task ${taskId} is not awaiting plan approval.`);
+    }
+
+    const changes = {};
+    if (plan.title !== undefined) {
+      if (typeof plan.title !== 'string' || !plan.title.trim()) throw new Error('Invalid task title.');
+      changes.title = plan.title.trim().slice(0, 120);
+    }
+    if (plan.agent !== undefined) {
+      if (!this._allowedAgents().includes(plan.agent)) throw new Error(`Unknown or disabled agent: ${plan.agent}`);
+      changes.agent = plan.agent;
+    }
+    if (plan.level !== undefined) {
+      if (!['hafif', 'orta', 'güçlü'].includes(plan.level)) throw new Error(`Unknown level: ${plan.level}`);
+      changes.level = plan.level;
+    }
+    if (plan.workerPrompt !== undefined) {
+      if (typeof plan.workerPrompt !== 'string' || !plan.workerPrompt.trim()) throw new Error('Worker prompt cannot be empty.');
+      changes.workerPrompt = plan.workerPrompt.trim();
+    }
+
+    const approved = this.board.update(taskId, changes);
+    if (!approved.agent || !approved.level || !approved.workerPrompt) {
+      throw new Error('Approved plan is incomplete (agent, level or worker prompt missing).');
+    }
+
+    this.board.addHistory(taskId, 'note', `Kullanıcı planı onayladı: ${approved.agent} • ${approved.level}`);
+    this.board.setStatus(taskId, 'queued', 'Plan onaylandı, görev sıraya alındı');
     this.emitChanged(taskId);
     await this.tick();
   }

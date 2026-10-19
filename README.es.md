@@ -16,6 +16,7 @@ Quotalala es una aplicación de escritorio local con Electron que coordina tus C
 
 - **Reanudación de sesión:** Una respuesta continúa en la misma sesión de CLI y envía solo la nueva instrucción, sin repetir el objetivo, la memoria ni los resultados anteriores. La sesión del coordinador se reanuda igual.
 - **Presupuestos de tarea configurables:** Subtareas, intentos, rondas de respuesta, rondas de coordinación y el límite de llamadas por ejecución se editan en Ajustes y se ajustan a rangos seguros.
+- **Aprobación del plan en el tablero:** Con «Mostrar el plan antes de ejecutar» activado, una tarea planificada espera tu decisión; los cambios que hagas en agente, nivel o instrucciones son exactamente lo que ejecuta el agente.
 - **Lógica de cuota más precisa:** Solo un límite real de cuota pausa la tarea. Una CLI ausente, una cuenta sin sesión o un error grave del agente la marcan como fallida, y «capacity»/«overloaded» temporal ya no espera 30 minutos.
 - **Valores predeterminados seguros:** El modelo del coordinador es Sonnet en lugar del más potente, y las etiquetas de bandeja y nivel de razonamiento siguen el idioma de la interfaz.
 - **Correcciones de interfaz:** La cuadrícula de presupuestos ya no se desborda, las columnas de la tabla de modelos siguen legibles, la insignia de estado queda junto al agente y la rama, y los bocadillos de la sala ya no muestran encabezados de proceso.

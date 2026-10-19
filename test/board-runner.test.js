@@ -284,6 +284,71 @@ test('Claude review requests revise -> re-calls same agent with same cliSessionI
   assert.equal(finalTask.status, 'ready_to_merge');
 });
 
+test('previewPlan parks the task for approval; edits are applied before the worker runs', async t => {
+  const testDir = path.join(root, 'repo-approval');
+  fs.mkdirSync(testDir, { recursive: true });
+  const dataRoot = path.join(root, 'approval-data');
+  fs.mkdirSync(dataRoot, { recursive: true });
+
+  const workerCalls = [];
+  setupMockAgents(t, (agentId, prompt, options) => {
+    if (prompt.includes('Kullanıcının görevini anla')) {
+      return {
+        code: 0,
+        stdout: JSON.stringify({
+          title: 'Approval fixture',
+          agent: 'claude',
+          level: 'hafif',
+          workerPrompt: 'Claude plan prompt',
+          question: null
+        })
+      };
+    }
+    if (prompt.includes('Sadece bu görevi yap')) {
+      workerCalls.push({ agentId, prompt });
+      return { code: 0, stdout: 'Worker output', sessionId: 'sess-approval' };
+    }
+    if (prompt.includes('Ajanın tamamladığı işi')) {
+      return { code: 0, stdout: JSON.stringify({ decision: 'approve', message: 'OK' }) };
+    }
+    return { code: 0, stdout: 'OK' };
+  });
+
+  const board = new TaskBoard(testDir, dataRoot);
+  const store = new HistoryStore(dataRoot);
+  store.saveSettings({ previewPlan: true });
+  const task = board.add('Task that needs a decision');
+  const runner = new BoardRunner({ cwd: testDir, root: dataRoot, board, store });
+
+  await runner.runTaskPipeline(task.id);
+
+  let current = board.get(task.id);
+  assert.equal(current.status, 'awaiting_approval');
+  assert.equal(current.agent, 'claude');
+  assert.equal(current.workerPrompt, 'Claude plan prompt');
+  assert.equal(workerCalls.length, 0);
+  assert.match(current.history.at(-1).text, /onayını bekliyor/);
+
+  // Reopening the app keeps the parked plan: nothing is lost while the user decides.
+  assert.equal(new TaskBoard(testDir, dataRoot).get(task.id).status, 'awaiting_approval');
+
+  // Editing the plan through the approval is what reaches the worker.
+  await assert.rejects(() => runner.approve(task.id, { agent: 'gpt-5' }), /Unknown or disabled agent/);
+  assert.equal(board.get(task.id).status, 'awaiting_approval');
+
+  // approval() runs the pipeline inline; the worker + review mocks resolve synchronously,
+  // so the task reaches the review outcome by the time the call returns.
+  let approved;
+  await runner.approve(task.id, { agent: 'codex', level: 'güçlü', workerPrompt: 'Edited plan prompt' }).then(() => { approved = board.get(task.id); });
+  assert.equal(workerCalls.length, 1);
+  assert.equal(workerCalls[0].agentId, 'codex');
+  assert.match(workerCalls[0].prompt, /Edited plan prompt/);
+  assert.equal(approved.agent, 'codex');
+  assert.equal(approved.level, 'güçlü');
+  // No git repository here, so an approved review completes without a merge step.
+  assert.equal(approved.status, 'merged');
+});
+
 test('needs_user -> board.answer -> continues with same session ID', async t => {
   const testDir = path.join(root, 'repo-ask-user');
   fs.mkdirSync(testDir, { recursive: true });

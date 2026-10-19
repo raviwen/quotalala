@@ -16,6 +16,7 @@ Quotalala is a local Electron desktop app that coordinates your authenticated AI
 
 - **Session resume:** A follow-up answer continues the same CLI session and sends only the new instruction, instead of repeating the goal, memory and previous results. The coordinator session is resumed the same way.
 - **Configurable task budgets:** Subtasks, attempts, reply rounds, management rounds and the per-run call limit are editable in Settings and clamped to safe ranges.
+- **Board plan approval:** With “Show plan before execution” enabled, a planned task waits for your decision; the agent, level or instruction edits you make are exactly what the worker runs.
 - **Sharper quota logic:** Only a real quota limit parks a task. A missing CLI, a signed-out account or a hard agent error fails it, and a transient "capacity"/"overloaded" response no longer waits 30 minutes.
 - **Safer defaults:** The coordinator model defaults to Sonnet rather than the strongest model, and tray and thinking-level labels follow the interface language.
 - **Interface repairs:** The Settings budget grid no longer overflows, model table columns stay readable, the board status badge sits with the agent and branch, and team room bubbles no longer show raw process headers.

@@ -5,6 +5,7 @@ const { DATA_DIR, projectKey, readJSON, writeJSON } = require('./storage');
 const ALLOWED_STATUSES = new Set([
   'queued',
   'planning',
+  'awaiting_approval',
   'running',
   'waiting_quota',
   'needs_user',

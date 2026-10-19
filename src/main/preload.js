@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('quotalalaAPI', {
   onLog: listen('stream:log'), onState: listen('state:update'), onPlan: listen('session:plan'),
   onOutput: listen('session:output'), onActivity: listen('session:activity'), onSelectAll: listen('text:select-all'),
   listBoard: invoke('board:list'), addBoardTask: invoke('board:add'), answerBoardTask: invoke('board:answer'),
+  approveBoardTask: invoke('board:approve'),
   cancelBoardTask: invoke('board:cancel'), mergeBoardTask: invoke('board:merge'), retryBoardTask: invoke('board:retry'),
   onBoardChanged: listen('board:changed'), onBoardStream: listen('board:stream')
 });

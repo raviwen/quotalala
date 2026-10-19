@@ -958,6 +958,49 @@ function renderBoardDetail(taskId) {
     body.append(promptSec);
   }
 
+  if (task.status === 'awaiting_approval') {
+    const planSec = el('div', 'board-detail-section');
+    planSec.append(el('strong', '', t('boardDetailPlan')), el('p', 'board-plan-hint', t('boardApproveHint')));
+
+    const allowedAgents = ['claude', 'codex'];
+    if (state.agents?.gemini?.enabled) allowedAgents.push('gemini');
+
+    const agentField = el('label', 'board-plan-field');
+    const agentSelect = el('select', 'board-input');
+    for (const id of allowedAgents) {
+      const opt = el('option', '', id.charAt(0).toUpperCase() + id.slice(1));
+      opt.value = id;
+      agentSelect.append(opt);
+    }
+    agentSelect.value = allowedAgents.includes(task.agent) ? task.agent : allowedAgents[0];
+    agentField.append(el('span', '', t('agent')), agentSelect);
+
+    const levelField = el('label', 'board-plan-field');
+    const levelSelect = el('select', 'board-input');
+    for (const lvl of ['hafif', 'orta', 'güçlü']) {
+      const opt = el('option', '', t(lvl));
+      opt.value = lvl;
+      levelSelect.append(opt);
+    }
+    levelSelect.value = ['hafif', 'orta', 'güçlü'].includes(task.level) ? task.level : 'hafif';
+    levelField.append(el('span', '', t('level')), levelSelect);
+
+    const planRow = el('div', 'board-plan-row');
+    planRow.append(agentField, levelField);
+
+    const promptBox = el('textarea', 'board-input board-plan-prompt');
+    promptBox.rows = 5;
+    promptBox.value = task.workerPrompt || '';
+
+    const approveBtn = button(t('btnApprovePlan'), async () => {
+      await api.approveBoardTask({ taskId: task.id, plan: { agent: agentSelect.value, level: levelSelect.value, workerPrompt: promptBox.value } });
+      notice(t('boardPlanApproved'));
+    }, 'btn btn-accent');
+
+    planSec.append(planRow, el('strong', '', t('taskInstruction')), promptBox, approveBtn);
+    body.append(planSec);
+  }
+
   if (task.status === 'needs_user') {
     const qSec = el('div', 'board-detail-section');
     qSec.append(el('strong', '', t('boardDetailQuestion')), el('p', '', task.question || t('boardAwaitAnswer')));
@@ -1044,7 +1087,7 @@ function renderBoardDetail(taskId) {
     actRow.append(retryBtn);
   }
 
-  if (['queued', 'planning', 'running', 'waiting_quota', 'needs_user', 'review'].includes(task.status)) {
+  if (['queued', 'planning', 'awaiting_approval', 'running', 'waiting_quota', 'needs_user', 'review'].includes(task.status)) {
     const cancelBtn = button(t('btnCancel'), async () => {
       await api.cancelBoardTask({ taskId: task.id });
     }, 'btn btn-secondary');
