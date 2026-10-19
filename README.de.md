@@ -12,6 +12,21 @@
 
 Quotalala ist eine lokale Electron-Desktop-App, die deine bereits angemeldeten KI-CLIs koordiniert. Starte sie in deinem Projekt und sende einen Prompt: Claude plant die Arbeit, verteilt Aufgaben und prüft die Ergebnisse. Gespeicherte Gespräche und die Projektzusammenfassung werden automatisch geladen.
 
+## Neu in 1.3.0
+
+- **Sitzungsfortsetzung:** Eine Rückfrage läuft in derselben CLI-Sitzung weiter und sendet nur die neue Anweisung, statt Ziel, Speicher und frühere Ergebnisse zu wiederholen. Die Koordinator-Sitzung wird ebenso fortgesetzt.
+- **Konfigurierbare Aufgabenbudgets:** Teilaufgaben, Versuche, Antwortrunden, Koordinationsrunden und das Aufruflimit pro Durchlauf sind in den Einstellungen editierbar und auf sichere Bereiche begrenzt.
+- **Genauere Kontingentlogik:** Nur ein echtes Kontingentlimit pausiert eine Aufgabe. Fehlende CLI, abgemeldetes Konto oder ein harter Agentenfehler lassen sie fehlschlagen; vorübergehendes „capacity“/„overloaded“ wartet nicht mehr 30 Minuten.
+- **Sichere Standardwerte:** Das Koordinator-Modell ist standardmäßig Sonnet statt des stärksten Modells; Tray- und Denkstufen-Beschriftungen folgen der Oberflächensprache.
+- **Oberflächenkorrekturen:** Das Budget-Raster in den Einstellungen läuft nicht mehr über, Modellspalten bleiben lesbar, das Statusabzeichen sitzt bei Agent und Branch, und Teamraum-Sprechblasen zeigen keine rohen Prozesszeilen mehr.
+
+## Neu in 1.2.0
+
+- **Aufgabenboard & parallele Ausführung:** Hintergrundwarteschlange mit bis zu 2 gleichzeitigen Arbeitsaufgaben. Claude plant jede Anfrage, delegiert an den passenden Agenten und prüft das Ergebnis.
+- **Isolierte Git-Worktrees & sicheres Zusammenführen:** Aufgaben laufen in getrennten Branches unter `~/.quotalala/worktrees/`. `git merge-tree` prüft im Speicher; sicheres Zusammenführen gelingt auch mit nicht committeten Dateien, solange sie sich nicht überschneiden.
+- **Modellkatalog & Denkstufe:** Unterstützung für Opus, Sonnet, GPT-6.1 Sol / Luna / Astra und eigene Denkstufen (`none`, `low`, `medium`, `high`, `max`).
+- **Belastbare Kontingentverwaltung:** Ein 429-Kontingent pausiert die Aufgabe in derselben Sitzung bis zum Reset, ohne Agentenwechsel.
+
 ## Neu in 1.1.0
 
 Claude beantwortet Rückfragen, holt andere Agenten hinzu und vergibt gezielte Korrekturen. Der Teamraum zeigt echte Aufgabenereignisse ohne zusätzliche Agentenaufrufe.

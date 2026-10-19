@@ -12,6 +12,21 @@
 
 Quotalala est une application de bureau locale avec Electron qui coordonne vos CLI d'IA déjà connectées à vos comptes. Ouvrez-la dans votre projet et écrivez un prompt : Claude planifie le travail, répartit les tâches et vérifie les résultats. Les conversations enregistrées et la mémoire du projet se chargent automatiquement.
 
+## Nouveautés de la version 1.3.0
+
+- **Reprise de session :** Une réponse se poursuit dans la même session CLI et n'envoie que la nouvelle instruction, sans répéter l'objectif, la mémoire et les résultats précédents. La session du coordinateur est reprise de la même façon.
+- **Budgets de tâche configurables :** Sous-tâches, tentatives, tours de réponse, tours de coordination et limite d'appels par exécution sont modifiables dans les Réglages et bornés à des plages sûres.
+- **Logique de quota affinée :** Seule une vraie limite de quota met la tâche en attente. Une CLI absente, un compte déconnecté ou une erreur grave de l'agent la font échouer, et « capacity »/« overloaded » temporaire n'attend plus 30 minutes.
+- **Valeurs par défaut sûres :** Le modèle du coordinateur est Sonnet plutôt que le plus puissant, et les libellés de la zone de notification et du niveau de réflexion suivent la langue de l'interface.
+- **Corrections d'interface :** La grille des budgets ne déborde plus, les colonnes du tableau des modèles restent lisibles, le badge d'état rejoint l'agent et la branche, et les bulles de la salle n'affichent plus les en-têtes de processus bruts.
+
+## Nouveautés de la version 1.2.0
+
+- **Tableau de tâches et exécution simultanée :** File d'attente en arrière-plan avec jusqu'à 2 tâches simultanées. Claude planifie chaque demande, délègue au bon agent et vérifie le résultat.
+- **Worktrees Git isolés et fusion sûre :** Les tâches s'exécutent dans des branches séparées sous `~/.quotalala/worktrees/`. `git merge-tree` vérifie en mémoire ; la fusion sûre fonctionne même avec des fichiers non validés s'ils ne se recoupent pas.
+- **Catalogue de modèles et niveau de réflexion :** Prise en charge d'Opus, Sonnet, GPT-6.1 Sol / Luna / Astra et de niveaux de réflexion personnalisés (`none`, `low`, `medium`, `high`, `max`).
+- **Gestion de quota robuste :** Un quota 429 met la tâche en pause dans la même session jusqu'à la réinitialisation, sans changer d'agent.
+
 ## Nouveautés de la version 1.1.0
 
 Claude répond aux questions, consulte les autres agents et attribue des corrections précises. La salle de travail affiche les événements réels sans appel supplémentaire aux agents.

@@ -12,6 +12,16 @@
 
 Quotalala, kendi hesabınla giriş yaptığın yapay zekâ CLI araçlarını birlikte çalıştıran yerel bir Electron masaüstü uygulamasıdır. Projenin içinde aç, tek bir prompt yaz; Claude işi planlasın, görevleri dağıtsın ve sonuçları kontrol etsin. O projeye ait kayıtlı konuşmalar ve hafıza otomatik yüklenir.
 
+## 1.3.0 ile gelenler
+
+- **Oturum devam ettirme:** Yanıt turu aynı CLI oturumunda sürer ve yalnızca yeni talimat gönderilir; hedef, hafıza ve önceki sonuçlar tekrar gönderilmez. Koordinatör oturumu da aynı şekilde sürdürülür.
+- **Yapılandırılabilir görev bütçeleri:** Alt görev, deneme, yanıt turu, yönetim turu ve çalışma başına çağrı sınırı Ayarlar'dan düzenlenir ve güvenli aralıklara kırpılır.
+- **Netleşen kota mantığı:** Yalnızca gerçek kota sınırı görevi bekletir. CLI yokluğu, giriş yapılmamış hesap veya ağır ajan hatası görevi başarısız sayar; geçici "capacity"/"overloaded" yanıtı 30 dakika beklemez.
+- **Güvenli varsayılanlar:** Koordinatör modeli en güçlü model yerine Sonnet; tepsi ve düşünme seviyesi etiketleri arayüz dilini izler.
+- **Arayüz düzeltmeleri:** Ayarlar'daki bütçe ızgarası taşmaz, model tablosu sütunları okunur kalır, pano durum rozeti ajan ve dal bilgisiyle aynı hizada durur ve ekip odası balonlarına ham süreç başlığı sızmaz.
+
+[Sürüm notları](CHANGELOG.md). Güncellemek için `npx quotalala@latest` veya `npm install -g quotalala@latest` kullan.
+
 ## 1.2.0 ile gelenler
 
 - **Task Board (Görev Panosu):** Arka planda aynı anda 2 görevi eşzamanlı çalıştırabilen kuyruk yönetimi. Claude her görevi önce inceler, uygun ajana atar ve tamamlanınca çıktıyı onaylar.
@@ -23,6 +33,9 @@ Quotalala, kendi hesabınla giriş yaptığın yapay zekâ CLI araçlarını bir
 
 ## 1.1.0 ile gelenler
 
+Claude takip sorularını yönetir, diğer ajanlara danışır ve hedefli düzeltmeler verir. Ekip odası ek ajan çağrısı yapmadan gerçek görev olaylarını gösterir.
+
+Ekonomik mod, düzenlenebilir plan onayı, canlı çıktı, Durdur, ayarlanabilir zaman aşımı ve eksik adımdan devam etme vardır. Sonuçlar ajan beyanı ile gözlenen kanıtı ayırır. Sınırlar: 3 yönetim turu, 8 görev, görev başına 2 deneme ve çalışma başına 20 çağrı.
 ## Ekran görüntüleri
 
 Gerçek Electron arayüzü, örnek proje ve mesajlarla görüntülendi; abonelik çağrısı veya özel proje geçmişi kullanılmadı. Arayüz Türkçe ve İngilizceyi destekler.

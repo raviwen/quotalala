@@ -12,6 +12,21 @@
 
 Quotalala es una aplicación de escritorio local con Electron que coordina tus CLI de IA con las sesiones ya iniciadas. Ábrela desde tu proyecto y escribe un prompt: Claude planifica el trabajo, reparte las tareas y revisa los resultados. Las conversaciones guardadas y la memoria del proyecto se cargan automáticamente.
 
+## Novedades de 1.3.0
+
+- **Reanudación de sesión:** Una respuesta continúa en la misma sesión de CLI y envía solo la nueva instrucción, sin repetir el objetivo, la memoria ni los resultados anteriores. La sesión del coordinador se reanuda igual.
+- **Presupuestos de tarea configurables:** Subtareas, intentos, rondas de respuesta, rondas de coordinación y el límite de llamadas por ejecución se editan en Ajustes y se ajustan a rangos seguros.
+- **Lógica de cuota más precisa:** Solo un límite real de cuota pausa la tarea. Una CLI ausente, una cuenta sin sesión o un error grave del agente la marcan como fallida, y «capacity»/«overloaded» temporal ya no espera 30 minutos.
+- **Valores predeterminados seguros:** El modelo del coordinador es Sonnet en lugar del más potente, y las etiquetas de bandeja y nivel de razonamiento siguen el idioma de la interfaz.
+- **Correcciones de interfaz:** La cuadrícula de presupuestos ya no se desborda, las columnas de la tabla de modelos siguen legibles, la insignia de estado queda junto al agente y la rama, y los bocadillos de la sala ya no muestran encabezados de proceso.
+
+## Novedades de 1.2.0
+
+- **Panel de tareas y ejecución simultánea:** Cola en segundo plano con hasta 2 tareas simultáneas. Claude planifica cada petición, delega en el agente adecuado y revisa el resultado.
+- **Worktrees de Git aislados y fusión segura:** Las tareas se ejecutan en ramas separadas bajo `~/.quotalala/worktrees/`. `git merge-tree` verifica en memoria; la fusión segura funciona incluso con archivos sin confirmar si no coinciden.
+- **Catálogo de modelos y nivel de razonamiento:** Compatibilidad con Opus, Sonnet, GPT-6.1 Sol / Luna / Astra y niveles de razonamiento personalizados (`none`, `low`, `medium`, `high`, `max`).
+- **Gestión de cuota resistente:** Un límite 429 pausa la tarea en la misma sesión hasta el reinicio, sin cambiar de agente.
+
 ## Novedades de 1.1.0
 
 Claude responde preguntas, consulta a otros agentes y asigna correcciones concretas. La sala del equipo muestra eventos reales sin llamadas adicionales a los agentes.

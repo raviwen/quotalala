@@ -12,6 +12,16 @@
 
 Quotalala is a local Electron desktop app that coordinates your authenticated AI CLIs. Open it from your project, write one prompt, and let Claude plan the work, assign tasks and review the results. That project's saved conversations and memory load automatically.
 
+## What is new in 1.3.0
+
+- **Session resume:** A follow-up answer continues the same CLI session and sends only the new instruction, instead of repeating the goal, memory and previous results. The coordinator session is resumed the same way.
+- **Configurable task budgets:** Subtasks, attempts, reply rounds, management rounds and the per-run call limit are editable in Settings and clamped to safe ranges.
+- **Sharper quota logic:** Only a real quota limit parks a task. A missing CLI, a signed-out account or a hard agent error fails it, and a transient "capacity"/"overloaded" response no longer waits 30 minutes.
+- **Safer defaults:** The coordinator model defaults to Sonnet rather than the strongest model, and tray and thinking-level labels follow the interface language.
+- **Interface repairs:** The Settings budget grid no longer overflows, model table columns stay readable, the board status badge sits with the agent and branch, and team room bubbles no longer show raw process headers.
+
+See [release notes](CHANGELOG.md). Update with `npx quotalala@latest` or `npm install -g quotalala@latest`.
+
 ## What is new in 1.2.0
 
 - **Task Board & Concurrent Execution:** Background queue running up to 2 concurrent worker tasks. Claude plans each intake request, delegates to the right agent, and reviews output.

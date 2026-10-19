@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-10-19
 
 - Continue a task's worker in the same CLI session: follow-up answers resume the original session and send only the new instruction instead of re-sending goal, memory and shared results (the managed coordinator session is resumed the same way, and only new results are sent each round).
 - Separate attempt and reply-round counters so a worker can answer a few coordinator questions without consuming its retry budget.
@@ -11,9 +11,7 @@
 - Task budgets (subtasks, attempts, reply rounds, management rounds, calls) are configurable in Settings with safe clamping.
 - Board intake can use Gemini when the user has explicitly enabled it.
 - Tray status and thinking-level labels are localized; Linux CI job runs the source checks and full offline test suite.
-
-## 1.2.4 — 2026-10-19
-
+- Interface repairs: the Settings budget grid no longer overflows, model table columns stay readable, the board status badge sits with the agent and branch meta, and team room speech bubbles no longer leak raw process headers (`[process] PID …`); screenshots refreshed.
 - Stream Claude text and tool activity before completion using the official stream-json interface, keeping canonical final results separate.
 - Show board planning, worker and review output, actual process IDs and work directories; preserve redacted partial output and early session IDs after failure.
 - Use the configured board timeout and keep failed desks visible in the team room.
