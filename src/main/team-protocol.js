@@ -21,7 +21,7 @@ function sourceSteps(value, knownSteps) {
   if (!Array.isArray(value) || value.length > 3 || value.some(step => !Number.isInteger(step) || !knownSteps.includes(step))) throw new Error('Invalid context source steps.');
   return [...new Set(value)];
 }
-function decision(text, { plan, outputs, attempts, available, parsePlan }) {
+function decision(text, { plan, outputs, replyCounts = {}, available, parsePlan }) {
   const value = jsonObject(text), known = plan.subtasks.map(task => task.step);
   if (!['continue', 'finish', 'blocked'].includes(value.action) || typeof value.reason !== 'string' || value.reason.length > 2000) throw new Error('Invalid coordination decision.');
   const tasks = value.tasks ?? [], messages = value.messages ?? [];
@@ -39,7 +39,7 @@ function decision(text, { plan, outputs, attempts, available, parsePlan }) {
   const replies = messages.map(message => {
     const task = plan.subtasks.find(item => item.step === message.step);
     if (!task || seen.has(task.step) || message.toAgent !== task.agent || !available(task.agent) || outputs.some(item => item.step === task.step && item.success)
-      || (attempts[task.step] || 0) >= LIMITS.attemptsPerTask || typeof message.content !== 'string' || !message.content.trim() || message.content.length > 4000) throw new Error('Invalid coordinator reply.');
+      || (replyCounts[task.step] || 0) >= LIMITS.repliesPerTask || typeof message.content !== 'string' || !message.content.trim() || message.content.length > 4000) throw new Error('Invalid coordinator reply.');
     seen.add(task.step);
     return { step: task.step, toAgent: task.agent, content: message.content, sourceSteps: sourceSteps(message.sourceSteps, outputs.map(item => item.step)) };
   });

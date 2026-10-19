@@ -4,76 +4,130 @@
     "name": "haiku",
     "displayName": "Claude Haiku",
     "preview": false,
-    "source": "Installed @anthropic-ai/claude-code/bin/claude.exe local model alias (verified 2026-10-14)",
+    "source": "https://code.claude.com/docs/en/model-config#model-aliases (verified 2026-10-19; alias targets can vary by provider/settings)",
     "levels": {
       "hafif": {
         "cost": 1,
         "description": "Hızlı, düşük maliyetli ve hafif görevler için güncel alias"
       }
-    }
+    },
+    "verified": true
   },
   {
     "agent": "claude",
     "name": "sonnet",
     "displayName": "Claude Sonnet",
     "preview": false,
-    "source": "claude --help (--model alias examples), verified 2026-10-14",
+    "source": "https://code.claude.com/docs/en/model-config#model-aliases (verified 2026-10-19; alias targets can vary by provider/settings)",
     "levels": {
       "orta": {
         "cost": 3,
         "description": "Dengeli analiz, kodlama ve koordinasyon için standart çalışma alias'ı"
       }
-    }
+    },
+    "verified": true
   },
   {
     "agent": "claude",
     "name": "opus",
     "displayName": "Claude Opus",
     "preview": false,
-    "source": "claude --help (--model alias examples), verified 2026-10-14",
+    "source": "https://code.claude.com/docs/en/model-config#model-aliases (verified 2026-10-19; alias targets can vary by provider/settings)",
     "levels": {
       "güçlü": {
         "cost": 5,
-        "description": "Karmaşık mimari ve derin muhakeme için en güçlü model alias'ı"
+        "description": "Complex reasoning alias; exact target depends on provider and local settings"
       }
-    }
+    },
+    "verified": true
   },
   {
     "agent": "codex",
     "name": "gpt-6-luna",
     "displayName": "GPT-6 Luna",
     "preview": false,
-    "source": "Local ~/.codex/models_cache.json, models[].slug=gpt-6-luna (verified 2026-10-14)",
+    "source": "Codex CLI model metadata: ~/.codex/models_cache.json, models[].slug=gpt-6-luna (verified 2026-10-19; name/effort evidence, not account access or price)",
     "levels": {
       "hafif": {
         "cost": 1,
         "description": "Hızlı ve düşük maliyetli model (Fast and affordable model for easier tasks)"
       }
-    }
+    },
+    "verified": true
   },
   {
     "agent": "codex",
     "name": "gpt-6.1-sol",
     "displayName": "GPT-6.1 Sol",
     "preview": false,
-    "source": "Local ~/.codex/models_cache.json, models[].slug=gpt-6.1-sol (verified 2026-10-14)",
+    "source": "Codex CLI model metadata: ~/.codex/models_cache.json, models[].slug=gpt-6.1-sol (verified 2026-10-19; name/effort evidence, not account access or price)",
     "levels": {
       "orta": {
         "cost": 3,
-        "description": "Günlük kodlama için güncel iş beygiri (Latest workhorse model for coding and everyday work)"
+        "description": "Günlük kodlama için güncel iş beygiri (Latest workhorse model for coding and everyday work)",
+        "thinking": "medium"
+      },
+      "güçlü": {
+        "cost": 5,
+        "thinking": "high",
+        "description": "Same verified model with greater reasoning effort; relative cost weight, not a price"
       }
-    }
+    },
+    "verified": true
   },
   {
     "agent": "codex",
     "name": "gpt-6-astra",
     "displayName": "GPT-6 Astra",
     "preview": false,
-    "source": "Local ~/.codex/models_cache.json, models[].slug=gpt-6-astra (verified 2026-10-14)",
+    "source": "Codex CLI model metadata: ~/.codex/models_cache.json, models[].slug=gpt-6-astra (verified 2026-10-19; name/effort evidence, not account access or price)",
     "levels": {
       "güçlü": {
         "cost": 5,
-        "description": "En zorlu işler için sınır seviyesi zeka (Frontier intelligence for the most demanding work)"
+        "description": "Verified frontier model; optional alternative, Sol high is the first strong-tier choice"
+      }
+    },
+    "verified": true
+  },
+  {
+    "agent": "gemini",
+    "name": "gemini-3.8-flash-low",
+    "displayName": "Gemini 3.8 Flash (Low)",
+    "preview": false,
+    "verified": true,
+    "source": "agy models output supplied by the user, 2026-10-19; preserved in test/fixtures/agy-models.txt (model names only; no prompt execution)",
+    "levels": {
+      "hafif": {
+        "cost": 1,
+        "description": "Same Gemini 3.8 Flash generation with low reasoning encoded in the model ID; relative routing weight, not a verified price"
+      }
+    }
+  },
+  {
+    "agent": "gemini",
+    "name": "gemini-3.8-flash-medium",
+    "displayName": "Gemini 3.8 Flash (Medium)",
+    "preview": false,
+    "verified": true,
+    "source": "agy models output supplied by the user, 2026-10-19; preserved in test/fixtures/agy-models.txt (model names only; no prompt execution)",
+    "levels": {
+      "orta": {
+        "cost": 3,
+        "description": "Same Gemini 3.8 Flash generation with medium reasoning encoded in the model ID; relative routing weight, not a verified price"
+      }
+    }
+  },
+  {
+    "agent": "gemini",
+    "name": "gemini-3.8-flash-high",
+    "displayName": "Gemini 3.8 Flash (High)",
+    "preview": false,
+    "verified": true,
+    "source": "agy models output supplied by the user, 2026-10-19; preserved in test/fixtures/agy-models.txt (model names only; no prompt execution)",
+    "levels": {
+      "güçlü": {
+        "cost": 5,
+        "description": "Same Gemini 3.8 Flash generation with high reasoning encoded in the model ID; relative routing weight, not a verified price"
       }
     }
   }

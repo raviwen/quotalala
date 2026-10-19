@@ -7,13 +7,54 @@ const USER_MODELS_PATH = path.join(DATA_DIR, 'models.json');
 const DEFAULT_MODELS_PATH = path.join(__dirname, 'default-models.json');
 const { writeJSON } = require('./storage');
 
-function validateModels(models) {
+function validateModels(models, { allowDuplicates = false } = {}) {
   if (!Array.isArray(models) || models.some(m => !m || !['claude', 'codex', 'gemini'].includes(m.agent) || typeof m.name !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.:/-]*$/.test(m.name) || typeof m.source !== 'string' || !m.source.trim()
     || (m.preview !== undefined && typeof m.preview !== 'boolean')
+    || (m.verified !== undefined && typeof m.verified !== 'boolean')
     || (!m.levels && !['hafif', 'orta', 'güçlü'].includes(m.level))
     || (m.levels && (typeof m.levels !== 'object' || Array.isArray(m.levels) || !Object.keys(m.levels).length || Object.entries(m.levels).some(([level, details]) => !['hafif', 'orta', 'güçlü'].includes(level) || !details || typeof details !== 'object' || !Number.isFinite(details.cost) || details.cost <= 0 || (details.model && !/^[a-zA-Z0-9][a-zA-Z0-9_.:/-]*$/.test(details.model)) || (details.thinking && !['low', 'medium', 'high', 'xhigh', 'max'].includes(details.thinking)))))
     || (m.level && (!Number.isFinite(m.cost) || m.cost <= 0)))) throw new Error('Each model must have an agent, a name, a valid tier/cost and a verified source.');
+  const keys = new Set();
+  for (const model of models) {
+    const key = `${model.agent}:${model.name}`;
+    if (!allowDuplicates && keys.has(key)) throw new Error(`Duplicate model: ${key}. Combine tiers in one levels entry.`);
+    keys.add(key);
+  }
   return models;
+}
+
+// Read-only compatibility for existing per-tier rows. Never rewrite the user's
+// catalog on load; saving the normalized result remains an explicit action.
+function normalizeModels(models, defaults = require('./default-models.json')) {
+  validateModels(models, { allowDuplicates: true });
+  const result = new Map();
+  for (const original of models) {
+    const model = structuredClone(original);
+    const known = defaults.find(item => item.agent === model.agent && item.name === model.name);
+    if (model.verified === undefined) model.verified = !!known?.verified;
+    if (known?.verified && /^(?:claude|codex) --help \(flag: --model\)$/.test(model.source)) model.source = known.source;
+    if (/\b[A-Za-z]:[\\/]|\/(?:Users|home)\//.test(model.source)) {
+      model.source = known?.source || 'Unverified local source (personal path omitted)';
+      if (!known) model.verified = false;
+    }
+    const key = `${model.agent}:${model.name}`;
+    const previous = result.get(key);
+    if (!previous) { result.set(key, model); continue; }
+    const levelsOf = item => item.levels || { [item.level]: { cost: item.cost, description: item.description || '', ...(item.thinking ? { thinking: item.thinking } : {}) } };
+    const combined = { ...levelsOf(previous) };
+    for (const [level, details] of Object.entries(levelsOf(model))) {
+      if (combined[level] && JSON.stringify(combined[level]) !== JSON.stringify(details)) throw new Error(`Conflicting duplicate model: ${key} (${level}).`);
+      combined[level] = details;
+    }
+    previous.levels = combined;
+    delete previous.level;
+    delete previous.cost;
+    delete previous.thinking;
+    previous.preview = !!previous.preview || !!model.preview;
+    if (previous.verified === false || model.verified === false) previous.verified = false;
+    if (previous.source !== model.source) previous.source += `; ${model.source}`;
+  }
+  return validateModels([...result.values()]);
 }
 
 class ModelsManager {
@@ -43,7 +84,7 @@ class ModelsManager {
       this.ensureModelsFile();
       if (fs.existsSync(USER_MODELS_PATH)) {
         const raw = fs.readFileSync(USER_MODELS_PATH, 'utf8');
-        return validateModels(JSON.parse(raw));
+        return normalizeModels(JSON.parse(raw));
       }
     } catch (err) {
       console.error('Error reading models.json:', err.message);
@@ -70,6 +111,11 @@ class ModelsManager {
     }
   }
 
+  async discoverModels(agent, options = {}) {
+    // Proposals only: no save, IPC mutation, or model selection side effects.
+    return require('./model-discovery').discoverModels(agent, options);
+  }
+
   getModelsForAgent(agentId) {
     const list = this.getModels();
     return list.filter(m => m.agent.toLowerCase() === agentId.toLowerCase());
@@ -79,7 +125,8 @@ class ModelsManager {
     const agentModels = this.getModelsForAgent(agentId);
     if (!agentModels.length) return null;
 
-    const eligible = allowPreview ? agentModels : agentModels.filter(m => !m.preview);
+    const verified = agentModels.filter(m => m.verified === true);
+    const eligible = allowPreview ? verified : verified.filter(m => !m.preview);
     const pool = eligible;
     if (!pool.length) return null;
     const targetLevel = (level || 'orta').toLowerCase();
@@ -118,8 +165,10 @@ class ModelsManager {
       }
     }
 
-    // 2. Fallback cascade
-    const fallbackLevels = ['orta', 'hafif', 'güçlü'].filter(l => l !== targetLevel);
+    // 2. Fallback cascade: prefer the nearest cheaper tier; only fall up when no
+    // cheaper tier exists, and keep the closest cost first ("hafif" is preferred
+    // over "güçlü" when the requested tier is missing).
+    const fallbackLevels = { 'hafif': ['orta', 'güçlü'], 'orta': ['hafif', 'güçlü'], 'güçlü': ['orta', 'hafif'] }[targetLevel] || [];
     for (const fb of fallbackLevels) {
       for (const m of pool) {
         if (m.levels && m.levels[fb]) {
@@ -183,3 +232,4 @@ class ModelsManager {
 
 module.exports = new ModelsManager();
 module.exports.validateModels = validateModels;
+module.exports.normalizeModels = normalizeModels;

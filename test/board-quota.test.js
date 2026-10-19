@@ -195,7 +195,7 @@ test('checkWaitingQuotaTasks advances waiting task when resumeAt has passed, usi
 
   let taskAfterCheck = board.get(task.id);
   assert.equal(taskAfterCheck.status, 'queued');
-  assert.match(taskAfterCheck.workerPrompt, /Kota yenilendi\. Kaldığın yerden devam et/);
+  assert.equal(taskAfterCheck.workerPrompt, 'Initial prompt', 'resume must keep the original worker instruction');
 
   // Now run tick to execute
   await runner.tick();
@@ -204,7 +204,8 @@ test('checkWaitingQuotaTasks advances waiting task when resumeAt has passed, usi
   assert.equal(finalTask.status, 'ready_to_merge');
   assert.equal(workerCalls.length, 1);
   assert.equal(workerCalls[0].resumeId, 'sess-persisted-999');
-  assert.match(workerCalls[0].prompt, /Kota yenilendi\. Kaldığın yerden devam et/);
+  assert.match(workerCalls[0].prompt, /Initial prompt/);
+  assert.match(workerCalls[0].prompt, /Sadece bu görevi yap/);
 });
 
 test('session not found error clears cliSessionId and retries with worktree notice', async t => {

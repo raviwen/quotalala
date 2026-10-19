@@ -102,14 +102,25 @@
     <label class="setting-toggle"><input type="checkbox" id="saveHistoryInput"><span data-i18n="saveHistory"></span></label>
     <label class="setting-toggle"><input type="checkbox" id="notificationsInput"><span data-i18n="taskNotifications"></span></label>
     <label class="setting-toggle"><input type="checkbox" id="autoMergeInput"><span data-i18n="autoMergeLabel">Onaylanan görevleri otomatik birleştir</span></label>
-    <div class="setting-row" style="margin: 12px 0; display: flex; align-items: center; gap: 10px;">
-      <label for="coordinatorModelSelect" data-i18n="coordinatorModelLabel" style="font-size: 12px; color: var(--text);">Koordinatör Claude Modeli:</label>
-      <select id="coordinatorModelSelect" style="background:#141715; color:var(--text); border:1px solid #ffffff16; border-radius:5px; padding:5px 8px; font-size:12px;">
+    <div class="setting-row">
+      <label for="coordinatorModelSelect" data-i18n="coordinatorModelLabel">Koordinatör Claude Modeli:</label>
+      <select id="coordinatorModelSelect" class="setting-select">
         <option value="opus">Claude Opus (En Güçlü)</option>
         <option value="sonnet">Claude Sonnet (Dengeli)</option>
         <option value="haiku">Claude Haiku (Hafif/Hızlı)</option>
       </select>
     </div>
+    <details id="limitsDetails">
+      <summary data-i18n="limitsLabel">Görev Bütçeleri</summary>
+      <p data-i18n="limitsHint"></p>
+      <div class="limits-grid">
+        <label class="limit-field"><span data-i18n="limitSubtasks"></span><input type="number" id="limitSubtasks" min="1" max="20"></label>
+        <label class="limit-field"><span data-i18n="limitAttempts"></span><input type="number" id="limitAttempts" min="1" max="5"></label>
+        <label class="limit-field"><span data-i18n="limitReplies"></span><input type="number" id="limitReplies" min="0" max="5"></label>
+        <label class="limit-field"><span data-i18n="limitRounds"></span><input type="number" id="limitRounds" min="1" max="8"></label>
+        <label class="limit-field"><span data-i18n="limitCalls"></span><input type="number" id="limitCalls" min="5" max="60"></label>
+      </div>
+    </details>
     <p data-i18n="taskNotificationsHint"></p><p data-i18n="privacyHint"></p>
     <button id="clearHistoryBtn" class="btn btn-secondary" data-i18n="clearHistory"></button>
     <details open id="modelsDetails">
@@ -149,6 +160,11 @@
         <option value="gpt-6-luna">GPT-6 Luna (Hafif)</option>
         <option value="gpt-6.1-sol">GPT-6.1 Sol (Orta)</option>
         <option value="gpt-6-astra">GPT-6 Astra (Güçlü)</option>
+      </datalist>
+      <datalist id="geminiModelsList">
+        <option value="gemini-3.8-flash-low">Gemini 3.8 Flash Low (Hafif)</option>
+        <option value="gemini-3.8-flash-medium">Gemini 3.8 Flash Medium (Orta)</option>
+        <option value="gemini-3.8-flash-high">Gemini 3.8 Flash High (Güçlü)</option>
       </datalist>
       <div id="modelsTableError" class="models-error-msg" role="alert" hidden></div>
       <div class="models-save-bar">

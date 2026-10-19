@@ -73,6 +73,8 @@ async function until(expression) {
   throw new Error('UI condition timed out: ' + expression);
 }
 app.whenReady().then(async () => {
+  const watchdog = setTimeout(() => { console.error('UI test exceeded 60 seconds.'); app.exit(1); }, 60000);
+  app.on('will-quit', () => clearTimeout(watchdog));
   try {
     win = new BrowserWindow({ width: 1420, height: 1000, show: false, webPreferences: { preload: path.resolve('src/main/preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, offscreen: true, backgroundThrottling: false } });
     await win.loadFile(path.resolve('src/renderer/index.html'));
@@ -129,7 +131,7 @@ app.whenReady().then(async () => {
     await js("document.getElementById('terminalWindow').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))");
     await until("window.getSelection().toString().includes('login required')"); assert.equal(selectMenuRequested, true);
     await js("document.querySelector('[data-level=all]').click(); document.getElementById('agentFilter').value='all'; document.getElementById('agentFilter').dispatchEvent(new Event('change'))");
-    await js(`document.getElementById('cwdInput').value=${JSON.stringify(process.cwd())}; document.getElementById('promptInput').value='OK'; perform(runSession)`);
+    await js(`document.getElementById('cwdInput').value=${JSON.stringify(process.cwd())}; document.getElementById('promptInput').value='OK'; void perform(runSession)`);
     await until("document.querySelector('.history-open') !== null && document.getElementById('notice').textContent.includes('kaydedildi')");
     await until("!busy && document.getElementById('planAndExecuteBtn').textContent.includes('Ekle')");
     assert.equal(store.list().length, 1); assert.match(store.memory(process.cwd()).summary, /Recent work/);
@@ -175,12 +177,12 @@ app.whenReady().then(async () => {
     await js("newSession(); document.querySelector('[data-tab=liveStreamTab]').click(); window.getSelection().removeAllRanges(); window.scrollTo(0,0); document.getElementById('notice').textContent=''");
     await new Promise(resolve => setTimeout(resolve, 200));
     const beforeApproval = workerCalls;
-    await js("newSession(); document.getElementById('previewPlan').checked=true; document.getElementById('promptInput').value='approval fixture'; perform(runSession)");
+    await js("newSession(); document.getElementById('previewPlan').checked=true; document.getElementById('promptInput').value='approval fixture'; void perform(runSession)");
     await until("document.getElementById('planDialog').open"); assert.equal(workerCalls, beforeApproval);
     await js("document.querySelector('.plan-prompt').value='Edited in UI'; document.getElementById('approvePlanBtn').click()");
     await until("!busy && !document.getElementById('planDialog').open && !document.getElementById('planAndExecuteBtn').disabled"); assert.equal(workerCalls, beforeApproval + 1);
     assert.equal(store.open(store.list()[0].id).turns[0].plan.subtasks[0].prompt, 'Edited in UI');
-    await js("newSession(); document.getElementById('previewPlan').checked=false; document.getElementById('promptInput').value='cancel fixture'; perform(runSession)");
+    await js("newSession(); document.getElementById('previewPlan').checked=false; document.getElementById('promptInput').value='cancel fixture'; void perform(runSession)");
     await until("document.getElementById('streamContainer').textContent.includes('LIVE PARTIAL')");
     assert.equal(await js("document.getElementById('stopBtn').disabled"), false);
     await js("document.getElementById('stopBtn').click()");
@@ -205,12 +207,23 @@ app.whenReady().then(async () => {
     assert.equal(await js("document.querySelector('.board-detail-section details').open"), false);
     assert.match(await js("document.querySelector('.board-detail-section details summary').textContent"), /Göster/);
 
+    // Failed board output remains expanded after reopening; live snapshots replace
+    // previous snapshots, and the room reflects the failure instead of idling.
+    await js("boardTasks[0].status='failed'; boardTasks[0].liveOutput='[process] PID 12345\\n[tool] Read: README.md\\nTimeout: fixture'; boardTasks[0].history=[{at:new Date().toISOString(),type:'status',text:'Timeout: fixture'}]; renderBoard(); renderRoom()");
+    assert.match(await js("document.getElementById('boardDetailBody').textContent"), /Read: README/);
+    assert.equal(await js("[...document.querySelectorAll('#boardDetailBody details')].find(node=>node.textContent.includes('PID 12345')).open"), true);
+    assert.equal(await js("document.getElementById('room-claude').dataset.status"), 'blocked');
+    emit('board:stream', { taskId: 'task-detail-1', chunk: { text: 'snapshot one', replace: true } });
+    emit('board:stream', { taskId: 'task-detail-1', chunk: { text: 'snapshot two', replace: true } });
+    await until("document.getElementById('boardDetailBody').textContent.includes('snapshot two')");
+    assert.equal(await js("document.getElementById('boardDetailBody').textContent.includes('snapshot one')"), false);
+
     // Test unified entry via promptInput + planAndExecuteBtn
     await js("document.getElementById('promptInput').value = 'New Unified Task'; document.getElementById('planAndExecuteBtn').click()");
     await until("document.getElementById('promptInput').value === ''");
 
     // Test quota warning when selected agent is limited
-    await js("state.agents.codex.status = 'limited'; renderState()");
+    await js("document.getElementById('runMode').value='economic'; document.getElementById('directAgent').value='codex'; state.agents.codex.status = 'limited'; renderState()");
     assert.equal(await js("document.getElementById('agentQuotaWarning').hidden"), false);
     await js("state.agents.codex.status = 'idle'; renderState()");
     assert.equal(await js("document.getElementById('agentQuotaWarning').hidden"), true);

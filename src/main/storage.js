@@ -18,7 +18,10 @@ function writeJSON(file, value) {
   for (let attempt = 0; ; attempt++) {
     try { fs.renameSync(tmp, file); break; }
     catch (error) {
-      if (process.platform !== 'win32' || !['EPERM', 'EBUSY'].includes(error.code) || attempt >= 3) throw error;
+      if (process.platform !== 'win32' || !['EPERM', 'EBUSY'].includes(error.code) || attempt >= 3) {
+        try { fs.unlinkSync(tmp); } catch { /* best effort cleanup */ }
+        throw error;
+      }
       // Brief Windows file locks can occur between frequent activity saves.
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20 * (attempt + 1));
     }
@@ -32,7 +35,9 @@ class HistoryStore {
   constructor(root = DATA_DIR) { this.root = root; }
   getSettings() {
     const saved = readJSON(path.join(this.root, 'settings.json'), {}) || {};
-    const { runOptions } = require('./run-options');
+    const { runOptions, applyLimits, sanitizeLimits } = require('./run-options');
+    // Apply saved budgets before validating timeout bounds so the two stay consistent.
+    applyLimits(saved.limits);
     let options;
     try { options = runOptions(saved); } catch { options = runOptions(); }
     return {
@@ -41,21 +46,25 @@ class HistoryStore {
       saveHistory: saved.saveHistory !== false,
       geminiEnabled: saved.geminiEnabled === true && saved.geminiRiskAccepted === true,
       geminiRiskAccepted: saved.geminiRiskAccepted === true,
-      coordinatorModel: saved.coordinatorModel || 'opus',
-      autoMerge: saved.autoMerge === true
+      coordinatorModel: saved.coordinatorModel || 'sonnet',
+      autoMerge: saved.autoMerge === true,
+      limits: sanitizeLimits(saved.limits)
     };
   }
   saveSettings(changes) {
-    const settings = { ...this.getSettings(), ...require('./run-options').runOptions({ ...this.getSettings(), ...changes }) };
+    const { runOptions, sanitizeLimits, applyLimits } = require('./run-options');
+    const settings = { ...this.getSettings(), ...runOptions({ ...this.getSettings(), ...changes }) };
     if (typeof changes.saveHistory === 'boolean') settings.saveHistory = changes.saveHistory;
     if (typeof changes.notificationsEnabled === 'boolean') settings.notificationsEnabled = changes.notificationsEnabled;
     if (typeof changes.coordinatorModel === 'string') settings.coordinatorModel = changes.coordinatorModel;
     if (typeof changes.autoMerge === 'boolean') settings.autoMerge = changes.autoMerge;
+    if (changes.limits && typeof changes.limits === 'object') settings.limits = sanitizeLimits({ ...settings.limits, ...changes.limits });
     if (typeof changes.geminiEnabled === 'boolean') {
       if (changes.geminiEnabled && changes.geminiRiskAccepted !== true) throw new Error('Gemini risk acceptance is required.');
       settings.geminiEnabled = changes.geminiEnabled;
       settings.geminiRiskAccepted = changes.geminiEnabled;
     }
+    applyLimits(settings.limits);
     writeJSON(path.join(this.root, 'settings.json'), settings);
     return settings;
   }

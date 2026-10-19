@@ -183,6 +183,14 @@ test('local timeout fixture ends promptly with partial stdout and pre-aborted wo
   assert.equal((await runWithStdin('must-never-spawn', [], '', { signal: controller.signal })).cancelled, true);
 });
 
+test('inactivity timeout resets on stdout chunks and allows longer active tasks', async () => {
+  const script = "let count=0;const i=setInterval(()=>{process.stdout.write('step ');if(++count===3){clearInterval(i);console.log('done');}},100);";
+  const result = await runWithStdin(process.execPath, ['-e', script], '', { timeout: 250 });
+  assert.equal(result.timedOut, false);
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /done/);
+});
+
 test('split recognizable secrets never pass through live IPC unredacted', async t => {
   const secret = 'sk-proj-' + 'x'.repeat(30), emitted = [];
   mockAgents(t, (id, prompt, options) => {

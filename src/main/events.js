@@ -2,7 +2,9 @@ const { randomUUID } = require('crypto');
 const { sanitize } = require('./privacy');
 const { format } = require('../shared/activity');
 function errorType(raw) {
-  if (/quota|rate.?limit|429|exhausted|usage limit|capacity|overloaded/i.test(raw)) return 'quota';
+  // Transient overload ("capacity"/"overloaded") is not a quota limit: parking the
+  // task for 30 minutes would be wrong, so it is reported as a normal error instead.
+  if (/quota|rate.?limit|\b429\b|exhausted|usage limit/i.test(raw)) return 'quota';
   if (/unauth|auth|required.*login|log.?in|sign.?in|401|403|credential|expired.*token/i.test(raw)) return 'auth';
   if (/ENOENT|not found|not recognized|cannot find|kurulu değil/i.test(raw)) return 'not_found';
   return 'other';

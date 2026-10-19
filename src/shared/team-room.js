@@ -1,6 +1,18 @@
 (function (root) {
   const ids = ['claude', 'codex', 'gemini'];
   const messages = new Set(['agent_question', 'coordinator_reply', 'output_transferred']);
+  // A speech bubble is for humans: skip the raw process header and keep the
+  // last meaningful output lines instead of a PID/path prefix.
+  function boardText(task, fallback) {
+    const result = typeof task.result === 'string' ? task.result.trim() : '';
+    if (result) return result;
+    const lines = String(task.liveOutput || '')
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && !/^\[process\]/i.test(line))
+      .slice(-3);
+    return lines.join(' ') || fallback;
+  }
   function project({ agents = {}, turn = null, live = false, approval = false, boardTasks = [] } = {}) {
     const desks = Object.fromEntries(ids.map(id => [id, { id, enabled: agents[id]?.enabled === true, status: 'idle', taskTitle: '', message: null, participated: false }]));
     let lastMessage = null, ended = null;
@@ -32,7 +44,9 @@
     const status = ended || turn?.status;
     const active = live && !['completed', 'cancelled', 'failed', 'partial', 'blocked', 'interrupted'].includes(status);
     for (const desk of Object.values(desks)) {
-      if (!desk.enabled && active || !desk.enabled && !desk.participated) desk.status = 'disabled';
+      // A disabled desk is only rendered as "disabled" when it never took part
+      // (or while the session is live); past participation keeps its outcome.
+      if ((!desk.enabled && active) || (!desk.enabled && !desk.participated)) desk.status = 'disabled';
       else if (!active && turn) {
         const outputs = (turn.outputs || turn.result?.outputs || []).filter(output => output.agent === desk.id);
         if (desk.participated || outputs.length) {
@@ -83,7 +97,7 @@
               type: 'output_transferred',
               from: workerAgent,
               to: 'claude',
-              text: bt.title ? `${bt.title} üzerinde çalışıyorum...` : 'Görevi yerine getiriyorum...',
+              text: boardText(bt, bt.title ? `${bt.title} üzerinde çalışıyorum...` : 'Görevi yerine getiriyorum...'),
               taskTitle: desks[workerAgent].taskTitle
             };
             desks[workerAgent].message = msg;
@@ -91,7 +105,9 @@
           }
         } else if (bt.status === 'needs_user') {
           const workerAgent = bt.agent && desks[bt.agent] ? bt.agent : 'claude';
-          if (desks[workerAgent] && desks[workerAgent].enabled) {
+          // Surface the pending question even when the desk is disabled: the
+          // user still owes an answer and must see it in the room.
+          if (desks[workerAgent]) {
             desks[workerAgent].status = 'waiting';
             desks[workerAgent].animated = false;
             const msg = {
@@ -109,6 +125,20 @@
       }
     }
 
+    if (!live && !boardIsActive) {
+      const seen = new Set();
+      for (const task of [...boardTasks].sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))) {
+        const id = task.agent || 'claude', desk = desks[id];
+        if (!desk?.enabled || seen.has(id)) continue;
+        seen.add(id);
+        const status = { failed: 'blocked', cancelled: 'cancelled', merged: 'completed', ready_to_merge: 'completed', waiting_quota: 'waiting' }[task.status];
+        if (!status) continue;
+        desk.status = status; desk.animated = false; desk.participated = true; desk.taskTitle = task.title || '';
+        desk.message = { id: `board-end-${task.id}`, from: id, to: 'claude', type: 'output_transferred', taskTitle: desk.taskTitle,
+          text: task.history?.at(-1)?.text || boardText(task, task.status) || task.status };
+        if (!lastMessage) lastMessage = desk.message;
+      }
+    }
     const effectiveActive = active || (!live && boardIsActive);
     return { desks: ids.map(id => desks[id]), lastMessage, active: effectiveActive, archive: !!turn && !live && !boardIsActive, approval: active && approval,
       status: effectiveActive ? (approval ? 'approval' : 'live') : (turn ? status || 'archive' : 'idle') };

@@ -8,11 +8,12 @@ const { jsonObject } = require('./team-protocol');
 const { isGitRepo, createWorktree, diffSummary, mergeBranch, removeWorktree } = require('./worktree');
 const { HistoryStore, DATA_DIR } = require('./storage');
 const { TaskBoard } = require('./task-board');
+const { redact } = require('./privacy');
 
 const SESSION_NOT_FOUND_REGEX = /session.*(?:not found|does not exist)|no.*session|conversation.*not found/i;
 
 class BoardRunner {
-  constructor({ cwd, root = DATA_DIR, board, emit = () => {}, store, timeout = 180000 }) {
+  constructor({ cwd, root = DATA_DIR, board, emit = () => {}, store, timeout = null }) {
     this.cwd = path.resolve(cwd);
     this.root = root;
     this.board = board || new TaskBoard(this.cwd, this.root);
@@ -65,8 +66,46 @@ class BoardRunner {
 
   emitStream(taskId, chunk) {
     try {
-      this.emit('board:stream', { taskId, chunk });
+      this.emit('board:stream', { cwd: this.cwd, taskId, chunk });
     } catch {}
+  }
+
+  async _runAgent(taskId, agent, prompt, options) {
+    let output = this.board.get(taskId)?.liveOutput || '', saved = 0;
+    const raw = new Map();
+    const safe = value => redact(value)
+      .replace(/\b(?:sk-(?:proj-|ant-)?|AIza|gh[pousr]_|github_pat_|eyJ)[A-Za-z0-9_.-]*/g, '[REDACTED]')
+      .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*/g, '[REDACTED PRIVATE KEY]');
+    const prefix = `${output}\n[${agent.id.toUpperCase()}] ${options.reason || 'Worker'} • ${options.model || 'default'} • ${options.cwd || this.cwd}\n`;
+    const publish = () => {
+      output = safe(prefix + [...raw.values()].join('')).slice(-20000);
+      this.emitStream(taskId, { stream: 'stdout', text: output, replace: true });
+      if (Date.now() - saved > 1000) { this.board.update(taskId, { liveOutput: output }); saved = Date.now(); }
+    };
+    publish();
+    try {
+      const response = await agent.runPrompt(prompt, {
+        ...options,
+        timeout: this.timeout ?? this.store.getSettings().timeout ?? 180000,
+        onStart: process => {
+          raw.set('process', `[process] PID ${process.pid} • ${process.executable}\n`); publish();
+        },
+        onSession: id => {
+          if (options.reason || typeof id !== 'string' || id.length > 200) return;
+          if (this.board.get(taskId)?.cliSessionId !== id) this.board.update(taskId, { cliSessionId: id });
+        },
+        onChunk: chunk => {
+          const stream = chunk.stream || 'stdout';
+          raw.set(stream, ((raw.get(stream) || '') + (chunk.text || '')).slice(-40000)); publish();
+        }
+      });
+      if (response.stdout) raw.set('final', `\n[result]\n${response.stdout}`);
+      if (response.stderr) raw.set('error', `\n[stderr]\n${response.stderr}`);
+      publish();
+      return response;
+    } finally {
+      this.board.update(taskId, { liveOutput: output });
+    }
   }
 
   async tick() {
@@ -150,18 +189,19 @@ class BoardRunner {
       .slice(0, 20)
       .map(t => ({ title: t.title, status: t.status, agent: t.agent }));
 
-    const claudeState = quota.getAgent('claude');
-    const codexState = quota.getAgent('codex');
-    const agentStatuses = {
-      claude: { enabled: claudeState?.enabled, status: claudeState?.status },
-      codex: { enabled: codexState?.enabled, status: codexState?.status }
-    };
+    // Gemini stays out of the board unless the user explicitly enabled it (manual risk acceptance).
+    const allowedAgents = ['claude', 'codex'];
+    if (quota.getAgent('gemini')?.enabled) allowedAgents.push('gemini');
+    const agentStatuses = Object.fromEntries(allowedAgents.map(id => {
+      const state = quota.getAgent(id);
+      return [id, { enabled: state?.enabled, status: state?.status }];
+    }));
 
     const intakePrompt = [
       'Sen Quotalala Görev Panosu baş operatörü Claude\'sun.',
-      'Kullanıcının görevini anla, en uygun ajanı ("claude" veya "codex") ve seviyeyi ("hafif"|"orta"|"güçlü") seç.',
+      `Kullanıcının görevini anla, en uygun ajanı (${allowedAgents.map(id => `"${id}"`).join(' veya ')}) ve seviyeyi ("hafif"|"orta"|"güçlü") seç.`,
       'SADECE ve SADECE şu JSON yapısını döndür, başka hiçbir metin veya markdown ekleme:',
-      '{"title":"kısa başlık","agent":"claude|codex","level":"hafif|orta|güçlü","workerPrompt":"ajana verilecek net talimat","question":null}',
+      `{"title":"kısa başlık","agent":"${allowedAgents.join('|')}","level":"hafif|orta|güçlü","workerPrompt":"ajana verilecek net talimat","question":null}`,
       'Eğer kullanıcıya soru sormadan işe başlanamıyorsa: question alanına soruyu yaz, agent ve workerPrompt null olabilir.',
       '',
       `KULLANICI İSTEĞİ: ${task.request}`,
@@ -174,7 +214,8 @@ class BoardRunner {
     const coordinatorModel = this.store.getSettings().coordinatorModel || 'opus';
     let res;
     try {
-      res = await claude.runPrompt(intakePrompt, {
+      res = await this._runAgent(taskId, claude, intakePrompt, {
+        cwd: this.cwd,
         model: coordinatorModel,
         level: 'hafif',
         noTools: true,
@@ -223,7 +264,7 @@ class BoardRunner {
       return;
     }
 
-    const validAgents = ['claude', 'codex'];
+    const validAgents = allowedAgents;
     const validLevels = ['hafif', 'orta', 'güçlü'];
     if (!validAgents.includes(planData.agent) || !validLevels.includes(planData.level) || !planData.workerPrompt) {
       this.board.setStatus(taskId, 'failed', 'Plan verisinde geçersiz ajan, seviye veya boş workerPrompt.');
@@ -247,8 +288,18 @@ class BoardRunner {
 
     const agentId = task.agent;
     const agentState = quota.getAgent(agentId);
-    if (!agentState?.enabled || ['limited', 'missing', 'unauthenticated', 'error'].includes(agentState?.status)) {
-      this._handleQuotaError(taskId, agentId, agentState?.lastError || 'Ajan kotası dolu veya kapalı');
+    // A quota limit is transient and worth waiting for; a missing CLI, a signed-out
+    // account or a hard error will not fix itself by parking the task for 30 minutes.
+    if (agentState?.enabled && agentState?.status === 'limited') {
+      this._handleQuotaError(taskId, agentId, agentState?.lastError || 'Ajan kotası dolu');
+      return;
+    }
+    if (!agentState?.enabled || ['missing', 'unauthenticated', 'error'].includes(agentState?.status)) {
+      const reason = !agentState?.enabled ? 'kapalı'
+        : agentState.status === 'missing' ? 'kurulu değil'
+          : agentState.status === 'unauthenticated' ? 'giriş yapılmamış' : 'hata durumunda';
+      this.board.setStatus(taskId, 'failed', `Ajan kullanılamıyor (${reason}): ${agentState?.lastError || agentId}`);
+      this.emitChanged(taskId);
       return;
     }
 
@@ -304,7 +355,7 @@ class BoardRunner {
 
     let res;
     try {
-      res = await agent.runPrompt(workerInstruction, runOpts);
+      res = await this._runAgent(taskId, agent, workerInstruction, runOpts);
     } catch (err) {
       quota.recordJobError(agentId, err.message);
       this.board.setStatus(taskId, 'failed', `Ajan çalıştırma hatası: ${err.message}`);
@@ -324,7 +375,7 @@ class BoardRunner {
       this.board.addHistory(taskId, 'note', 'Önceki oturum bulunamadı. Worktree incelenerek devam edilecek.');
       const fallbackPrompt = `${task.workerPrompt}\n\nÖnceki oturum bulunamadı. Worktree'deki mevcut değişikliklere bak ve kaldığın yerden devam et. İş bitince değişikliklerini bu branch'e commit et. Sonunda kısa bir özet yaz: ne yaptın, hangi dosyalar değişti, neyi test edemedin.`;
       try {
-        res = await agent.runPrompt(fallbackPrompt, {
+        res = await this._runAgent(taskId, agent, fallbackPrompt, {
           ...runOpts,
           resumeId: undefined
         });
@@ -392,7 +443,8 @@ class BoardRunner {
     const coordinatorModel = this.store.getSettings().coordinatorModel || 'opus';
     let res;
     try {
-      res = await claude.runPrompt(reviewPrompt, {
+      res = await this._runAgent(taskId, claude, reviewPrompt, {
+        cwd: this.cwd,
         model: coordinatorModel,
         level: 'hafif',
         noTools: true,
@@ -521,10 +573,10 @@ class BoardRunner {
     for (const task of waiting) {
       const dueTime = task.resumeAt ? new Date(task.resumeAt).getTime() : 0;
       if (now >= dueTime) {
+        // Keep the original workerPrompt: the CLI session resumes with its own
+        // context, and the "session not found" fallback already re-sends it.
+        this.board.addHistory(task.id, 'note', 'Kota yenilendi; kaldığı yerden devam edecek.');
         if (task.cliSessionId) {
-          this.board.update(task.id, {
-            workerPrompt: 'Kota yenilendi. Kaldığın yerden devam et. Daha önce yaptıklarını tekrarlama.'
-          });
           this.board.setStatus(task.id, 'queued', 'Kota yenilendi, aynı oturumda sıraya alındı');
         } else {
           this.board.setStatus(task.id, 'queued', 'Kota yenilendi, görev sıraya alındı');
@@ -543,8 +595,10 @@ class BoardRunner {
     this.board.addHistory(taskId, 'note', `Kullanıcı cevabı: ${text}`);
 
     if (task.cliSessionId && task.agent) {
+      // Appended, never overwritten: the fallback path (session not found) still
+      // needs the original instruction and the worktree context.
       this.board.update(taskId, {
-        workerPrompt: `Kullanıcı cevabı: ${text}`,
+        workerPrompt: `${task.workerPrompt || task.request}\n\nKULLANICI CEVABI: ${text}`,
         question: null,
         status: 'queued'
       });

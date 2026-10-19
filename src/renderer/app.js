@@ -38,7 +38,13 @@ function showRoomMessage(message, focus = true) {
 function renderRoom() {
   roomView ||= new TeamRoomView({ scene: $('roomScene'), t, onInspect: showRoomMessage, onDetails: showAgentDetails });
   const turn = roomTurnId ? viewedTurns.find(item => item.id === roomTurnId) || viewedTurns.at(-1) : viewedTurns.at(-1);
-  roomView.update(TeamRoomModel.project({ agents: state.agents, turn, live: busy && turn === viewedTurns.at(-1), approval: !!pendingApproval, boardTasks }));
+  const room = TeamRoomModel.project({ agents: state.agents, turn, live: busy && turn === viewedTurns.at(-1), approval: !!pendingApproval, boardTasks });
+  roomView.update(room);
+  if (inspectedMessage?.id?.startsWith('board-') && !$('roomMessageDetails').hidden) {
+    const task = boardTasks.find(task => inspectedMessage.id.endsWith(task.id));
+    const latest = room.desks.find(desk => desk.message?.id?.endsWith(task?.id))?.message;
+    if (latest) showRoomMessage(latest, false);
+  }
   $('roomBody').hidden = roomCollapsed; $('toggleRoomBtn').textContent = t(roomCollapsed ? 'roomExpand' : 'roomCollapse'); $('toggleRoomBtn').setAttribute('aria-expanded', String(!roomCollapsed));
 }
 function resetRoomSelection() { roomTurnId = null; inspectedMessage = null; $('roomMessageDetails').hidden = true; }
@@ -387,7 +393,13 @@ async function submitTask() {
   activeTab = 'boardTab';
   document.querySelectorAll('.tab-btn').forEach(node => node.classList.toggle('active', node.dataset.tab === 'boardTab'));
   document.querySelectorAll('.tab-content').forEach(node => node.classList.toggle('active', node.id === 'boardTab'));
-  await api.addBoardTask({ request: text });
+  try {
+    await api.addBoardTask({ request: text });
+  } catch (error) {
+    // Give the typed task back: it was never accepted by the main process.
+    $('promptInput').value = text;
+    throw error;
+  }
 }
 $('planAndExecuteBtn').addEventListener('click', () => perform(submitTask));
 $('newSessionBtn').addEventListener('click', newSession);
@@ -421,6 +433,9 @@ function parseModelRowData(m) {
     cost = m.cost ?? 1;
     thinking = m.thinking || 'none';
   }
+  const originalLevels = m.levels && typeof m.levels === 'object' && Object.keys(m.levels).length
+    ? m.levels
+    : (m.level ? { [m.level]: { cost: m.cost ?? 1, description: m.description, ...(m.thinking ? { thinking: m.thinking } : {}) } } : null);
   return {
     agent: m.agent || 'claude',
     name: m.name || '',
@@ -430,8 +445,22 @@ function parseModelRowData(m) {
     thinking,
     preview: !!m.preview,
     source: m.source || '',
-    originalLevels: m.levels
+    originalLevels,
+    verified: m.verified === undefined || m.verified === null ? null : m.verified === true
   };
+}
+
+function levelDetailsForRow(meta, level, cost, thinking) {
+  const details = {
+    cost: Number.isFinite(cost) && cost > 0 ? cost : 1,
+    description: meta?.levels?.[level]?.description || `${t(level)}`
+  };
+  if (thinking && thinking !== 'none') details.thinking = thinking;
+  return details;
+}
+
+function agentDatalist(agentId) {
+  return agentId === 'codex' ? 'codexModelsList' : agentId === 'gemini' ? 'geminiModelsList' : 'claudeModelsList';
 }
 
 function renderModelsTable(modelList) {
@@ -446,6 +475,8 @@ function renderModelsTable(modelList) {
     const data = parseModelRowData(item);
     const tr = el('tr');
     tr.dataset.index = String(index);
+    // Preserve the full multi-tier entry and verification across edits/saves.
+    tr.modelMeta = { levels: data.originalLevels, verified: data.verified };
 
     // Agent dropdown
     const tdAgent = el('td');
@@ -464,11 +495,11 @@ function renderModelsTable(modelList) {
     inName.type = 'text';
     inName.value = data.name;
     inName.className = 'model-name-input';
-    inName.setAttribute('list', data.agent === 'codex' ? 'codexModelsList' : 'claudeModelsList');
+    inName.setAttribute('list', agentDatalist(data.agent));
     tdName.append(inName);
 
     selAgent.addEventListener('change', () => {
-      inName.setAttribute('list', selAgent.value === 'codex' ? 'codexModelsList' : 'claudeModelsList');
+      inName.setAttribute('list', agentDatalist(selAgent.value));
     });
 
     // DisplayName input
@@ -494,11 +525,12 @@ function renderModelsTable(modelList) {
     const tdThinking = el('td');
     const selThinking = el('select', 'model-thinking-select');
     const thinkingOptions = [
-      { val: 'none', label: 'Varsayılan' },
-      { val: 'low', label: 'Düşük (Low)' },
-      { val: 'medium', label: 'Orta (Medium)' },
-      { val: 'high', label: 'Yüksek (High)' },
-      { val: 'max', label: 'Maksimum (Max)' }
+      { val: 'none', label: t('thinkingNone') },
+      { val: 'low', label: t('thinkingLow') },
+      { val: 'medium', label: t('thinkingMedium') },
+      { val: 'high', label: t('thinkingHigh') },
+      { val: 'xhigh', label: t('thinkingXHigh') },
+      { val: 'max', label: t('thinkingMax') }
     ];
     for (const to of thinkingOptions) {
       const opt = el('option', '', to.label);
@@ -576,32 +608,29 @@ function getModelsFromTable() {
 
     let rowError = null;
     if (!['claude', 'codex', 'gemini'].includes(agent)) {
-      rowError = 'Geçersiz ajan';
+      rowError = t('modelErrAgent');
     } else if (!name || !/^[a-zA-Z0-9][a-zA-Z0-9_.:/-]*$/.test(name)) {
-      rowError = 'Geçersiz model adı (özel karakterler içermemeli)';
+      rowError = t('modelErrName');
     } else if (!['hafif', 'orta', 'güçlü'].includes(level)) {
-      rowError = 'Geçersiz seviye';
+      rowError = t('modelErrLevel');
     } else if (!Number.isFinite(cost) || cost <= 0) {
-      rowError = 'Maliyet en az 1 olmalıdır';
+      rowError = t('modelErrCost');
     } else if (!source) {
-      rowError = 'Kaynak alanı boş bırakılamaz';
+      rowError = t('modelErrSource');
     }
 
     if (rowError) {
       tr.classList.add('row-error');
       hasError = true;
       if (!firstErrorMsg) {
-        firstErrorMsg = `Satır ${idx + 1}: ${rowError}`;
+        firstErrorMsg = t('modelsRowError').replace('{row}', String(idx + 1)).replace('{msg}', rowError);
       }
     }
 
-    const levelDetails = {
-      cost: Number.isFinite(cost) && cost > 0 ? cost : 1,
-      description: `${t(level)} seviyesi`
-    };
-    if (thinking && thinking !== 'none') {
-      levelDetails.thinking = thinking;
-    }
+    // Keep every tier the row originally had; only the edited tier is re-written.
+    const meta = tr.modelMeta;
+    const levels = { ...(meta?.levels || {}) };
+    levels[level] = levelDetailsForRow(meta, level, cost, thinking);
 
     const modelObj = {
       agent,
@@ -609,10 +638,9 @@ function getModelsFromTable() {
       displayName: displayName || name,
       preview: !!preview,
       source,
-      levels: {
-        [level]: levelDetails
-      }
+      levels
     };
+    if (meta?.verified !== null && meta?.verified !== undefined) modelObj.verified = meta.verified;
     result.push(modelObj);
   });
 
@@ -641,20 +669,12 @@ function syncModelsTableToRaw() {
       const cost = Number(tr.querySelector('.model-cost-input')?.value) || 1;
       const preview = tr.querySelector('.model-preview-input')?.checked || false;
       const source = tr.querySelector('.model-source-input')?.value.trim() || '';
-      const levelDetails = { cost, description: `${level} tier` };
-      if (thinking && thinking !== 'none') {
-        levelDetails.thinking = thinking;
-      }
-      list.push({
-        agent,
-        name,
-        displayName,
-        preview,
-        source,
-        levels: {
-          [level]: levelDetails
-        }
-      });
+      const meta = tr.modelMeta;
+      const levels = { ...(meta?.levels || {}) };
+      levels[level] = levelDetailsForRow(meta, level, cost, thinking);
+      const row = { agent, name, displayName, preview, source, levels };
+      if (meta?.verified !== null && meta?.verified !== undefined) row.verified = meta.verified;
+      list.push(row);
     });
     $('modelsInput').value = JSON.stringify(list, null, 2);
   } catch {}
@@ -687,9 +707,9 @@ $('addModelRowBtn')?.addEventListener('click', () => {
   inName.type = 'text';
   inName.value = 'new-model';
   inName.className = 'model-name-input';
-  inName.setAttribute('list', selAgent.value === 'codex' ? 'codexModelsList' : 'claudeModelsList');
+  inName.setAttribute('list', agentDatalist(selAgent.value));
   selAgent.addEventListener('change', () => {
-    inName.setAttribute('list', selAgent.value === 'codex' ? 'codexModelsList' : 'claudeModelsList');
+    inName.setAttribute('list', agentDatalist(selAgent.value));
   });
   tdName.append(inName);
 
@@ -711,14 +731,15 @@ $('addModelRowBtn')?.addEventListener('click', () => {
 
   const tdThinking = el('td');
   const selThinking = el('select', 'model-thinking-select');
-  const thinkingOptions = [
-    { val: 'none', label: 'Varsayılan' },
-    { val: 'low', label: 'Düşük (Low)' },
-    { val: 'medium', label: 'Orta (Medium)' },
-    { val: 'high', label: 'Yüksek (High)' },
-    { val: 'max', label: 'Maksimum (Max)' }
+  const newThinkingOptions = [
+    { val: 'none', label: t('thinkingNone') },
+    { val: 'low', label: t('thinkingLow') },
+    { val: 'medium', label: t('thinkingMedium') },
+    { val: 'high', label: t('thinkingHigh') },
+    { val: 'xhigh', label: t('thinkingXHigh') },
+    { val: 'max', label: t('thinkingMax') }
   ];
-  for (const to of thinkingOptions) {
+  for (const to of newThinkingOptions) {
     const opt = el('option', '', to.label);
     opt.value = to.val;
     selThinking.append(opt);
@@ -791,7 +812,11 @@ $('settingsBtn').addEventListener('click', () => perform(async () => {
     $('autoMergeInput').disabled = busy;
   }
   if ($('coordinatorModelSelect')) {
-    $('coordinatorModelSelect').value = settings.coordinatorModel || 'opus';
+    $('coordinatorModelSelect').value = settings.coordinatorModel || 'sonnet';
+  }
+  const savedLimits = settings.limits || {};
+  for (const [id, key] of [['limitSubtasks', 'subtasks'], ['limitAttempts', 'attemptsPerTask'], ['limitReplies', 'repliesPerTask'], ['limitRounds', 'coordinationRounds'], ['limitCalls', 'calls']]) {
+    if ($(id) && savedLimits[key] !== undefined) $(id).value = String(savedLimits[key]);
   }
   $('modelsInput').value = JSON.stringify(models, null, 2);
   showingRawModels = false;
@@ -810,6 +835,13 @@ $('autoMergeInput')?.addEventListener('change', () => perform(async () => {
 }));
 $('coordinatorModelSelect')?.addEventListener('change', () => perform(async () => {
   settings = await api.saveSettings({ coordinatorModel: $('coordinatorModelSelect').value });
+  notice(t('settingsSaved') || 'Ayar kaydedildi.');
+}));
+const limitFields = { limitSubtasks: 'subtasks', limitAttempts: 'attemptsPerTask', limitReplies: 'repliesPerTask', limitRounds: 'coordinationRounds', limitCalls: 'calls' };
+for (const id of Object.keys(limitFields)) $(id)?.addEventListener('change', () => perform(async () => {
+  const limits = {};
+  for (const [field, key] of Object.entries(limitFields)) limits[key] = Number($(field).value);
+  settings = await api.saveSettings({ limits });
   notice(t('settingsSaved') || 'Ayar kaydedildi.');
 }));
 $('clearHistoryBtn').addEventListener('click', () => perform(async () => { if (!confirm(t('clearHistoryConfirm'))) return; await api.clearHistory(); newSession(); await refreshHistory(); await loadMemory(); }));
@@ -834,7 +866,7 @@ $('saveModelsBtn').addEventListener('click', () => perform(async () => {
   notice(t('modelsSaved'));
   $('modelsTableError').hidden = true;
 }));
-let boardTasks = [], selectedBoardTaskId = null, boardStreams = new Map();
+let boardTasks = [], selectedBoardTaskId = null, boardStreams = new Map(), boardStreamFrame = null;
 
 function boardStatusLabel(status, resumeAt) {
   if (status === 'waiting_quota' && resumeAt) {
@@ -892,7 +924,7 @@ function renderBoardDetail(taskId) {
   if (!task || !modal || !body) return;
 
   modal.hidden = false;
-  $('boardDetailTitle').textContent = task.title || task.request.slice(0, 50) || 'Görev';
+  $('boardDetailTitle').textContent = task.title || task.request.slice(0, 50) || t('boardDefaultTitle');
   body.replaceChildren();
 
   // Subtitle line directly under title: Status badge + Agent / Level (+ Branch)
@@ -908,7 +940,7 @@ function renderBoardDetail(taskId) {
 
   // İSTEK: User original request
   const reqSec = el('div', 'board-detail-section');
-  reqSec.append(el('strong', '', 'İSTEK:'), el('p', '', task.request));
+  reqSec.append(el('strong', '', t('boardDetailRequest')), el('p', '', task.request));
   body.append(reqSec);
 
   // AJAN TALİMATI: Collapsed by default, toggled with Göster / Gizle
@@ -928,7 +960,7 @@ function renderBoardDetail(taskId) {
 
   if (task.status === 'needs_user') {
     const qSec = el('div', 'board-detail-section');
-    qSec.append(el('strong', '', 'SORU:'), el('p', '', task.question || 'Cevap bekleniyor'));
+    qSec.append(el('strong', '', t('boardDetailQuestion')), el('p', '', task.question || t('boardAwaitAnswer')));
     const ansRow = el('div', 'board-composer');
     const ansInput = el('input', 'board-input');
     ansInput.placeholder = t('userAnswerPlaceholder');
@@ -950,17 +982,17 @@ function renderBoardDetail(taskId) {
       }
     } catch {}
     const resSec = el('div', 'board-detail-section');
-    resSec.append(el('strong', '', 'SONUÇ:'), el('div', 'output-block', cleanResult));
+    resSec.append(el('strong', '', t('boardDetailResult')), el('div', 'output-block', cleanResult));
     body.append(resSec);
   }
 
-  const streamText = boardStreams.get(task.id);
+  const streamText = boardStreams.get(task.id) || task.liveOutput;
   if (streamText) {
     const streamSec = el('div', 'board-detail-section');
     const details = el('details');
     // Open only while task is running or planning
     const isLive = ['running', 'planning', 'review'].includes(task.status);
-    details.open = isLive;
+    details.open = isLive || task.status === 'failed';
     const summary = el('summary', '', `${details.open ? '▼' : '▶'} ${t('taskLiveOutput')}`);
     details.append(summary, el('div', 'output-block', streamText));
     details.addEventListener('toggle', () => {
@@ -1031,7 +1063,14 @@ async function loadBoard() {
 }
 
 api.onBoardChanged(payload => {
+  // Same guard as onBoardStream: never apply another project's board state.
+  if (payload.cwd && payload.cwd !== project.cwd) return;
   if (payload.tasks) {
+    // Drop cached live streams for terminal tasks; detail view falls back to
+    // the persisted task.liveOutput.
+    for (const task of payload.tasks) {
+      if (['merged', 'failed', 'cancelled'].includes(task.status)) boardStreams.delete(task.id);
+    }
     boardTasks = payload.tasks;
     renderBoard();
     renderRoom();
@@ -1040,21 +1079,21 @@ api.onBoardChanged(payload => {
 
 api.onBoardStream(payload => {
   if (!payload.taskId || !payload.chunk) return;
+  if (payload.cwd && payload.cwd !== project.cwd) return;
   const current = boardStreams.get(payload.taskId) || '';
   const addition = typeof payload.chunk === 'string' ? payload.chunk : (payload.chunk.text || '');
-  boardStreams.set(payload.taskId, (current + addition).slice(-20000));
-  if (selectedBoardTaskId === payload.taskId) {
-    renderBoardDetail(selectedBoardTaskId);
-  }
+  boardStreams.set(payload.taskId, (payload.chunk.replace ? addition : current + addition).slice(-20000));
+  const task = boardTasks.find(task => task.id === payload.taskId);
+  if (task) task.liveOutput = boardStreams.get(payload.taskId);
+  if (boardStreamFrame === null) boardStreamFrame = requestAnimationFrame(() => {
+    boardStreamFrame = null;
+    if (selectedBoardTaskId && boardStreams.has(selectedBoardTaskId)) renderBoardDetail(selectedBoardTaskId);
+    renderRoom();
+  });
 });
 
-$('boardAddBtn')?.addEventListener('click', () => perform(async () => {
-  const input = $('boardTaskInput');
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  await api.addBoardTask({ request: text });
-}));
+// NOTE: task submission happens through submitTask(); the old boardAddBtn
+// handler was removed when its DOM ids no longer existed in index.html.
 
 $('boardDetailCloseBtn')?.addEventListener('click', () => {
   selectedBoardTaskId = null;

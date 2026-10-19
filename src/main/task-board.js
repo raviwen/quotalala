@@ -28,6 +28,7 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   'resumeAt',
   'question',
   'result',
+  'liveOutput',
   'history'
 ]);
 
@@ -114,6 +115,7 @@ class TaskBoard {
       resumeAt: null,
       question: null,
       result: null,
+      liveOutput: '',
       createdAt: now,
       updatedAt: now,
       history: [

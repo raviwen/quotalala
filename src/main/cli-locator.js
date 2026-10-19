@@ -13,9 +13,12 @@ const execCache = {};
 
 function findExecutable(commandName) {
   if (path.isAbsolute(commandName) && fs.existsSync(commandName)) return commandName;
-  if (execCache[commandName]) {
+  // A cached path must still exist: CLIs can be installed, moved or uninstalled
+  // while the app stays open.
+  if (execCache[commandName] && fs.existsSync(execCache[commandName])) {
     return execCache[commandName];
   }
+  delete execCache[commandName];
 
   const appData = process.env.APPDATA || '';
   const localAppData = process.env.LOCALAPPDATA || '';
@@ -97,11 +100,28 @@ function runWithStdin(cmd, args = [], input = '', options = {}) {
     let stdout = '';
     let stderr = '';
     let isFinished = false;
+    proc.once('spawn', () => options.onStart?.({ pid: proc.pid, executable: resolvedCmd, cwd: options.cwd || process.cwd() }));
 
     let stopCode = null, cleanupTimer, cleanupPending = false, closed = false, cleanupUnconfirmed = false;
+    let timer = null;
+    // Absolute cap in case a process keeps producing output forever; it scales
+    // with the configured inactivity timeout instead of always cutting long runs
+    // short at 30 minutes.
+    const hardTimeoutMs = options.hardTimeout || Math.max(timeoutMs, 1800000);
+    let hardTimer = setTimeout(() => stop(-999), hardTimeoutMs);
+    const resetTimer = () => {
+      if (isFinished || stopCode !== null) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => stop(-999), timeoutMs);
+    };
+    resetTimer();
+
     const finish = code => {
       if (isFinished) return;
-      isFinished = true; clearTimeout(timer); clearTimeout(cleanupTimer);
+      isFinished = true;
+      if (timer) clearTimeout(timer);
+      if (hardTimer) clearTimeout(hardTimer);
+      clearTimeout(cleanupTimer);
       options.signal?.removeEventListener('abort', cancel);
       resolve({ code: stopCode ?? code, cancelled: stopCode === -998, timedOut: stopCode === -999, cleanupUnconfirmed,
         stdout: stdout.trim(), stderr: stderr.trim(), durationMs: Date.now() - startTime });
@@ -109,7 +129,7 @@ function runWithStdin(cmd, args = [], input = '', options = {}) {
     const stop = code => {
       if (isFinished || stopCode !== null) return;
       stopCode = code;
-      if (code === -999) stderr += `\nTimeout: ${timeoutMs}ms`;
+      if (code === -999) stderr += `\nTimeout: ${timeoutMs}ms (inactivity)`;
       // Kill the process group/tree, including shell wrappers and grandchildren.
       try {
         if (process.platform === 'win32' && proc.pid) {
@@ -127,12 +147,19 @@ function runWithStdin(cmd, args = [], input = '', options = {}) {
       cleanupTimer = setTimeout(() => { cleanupUnconfirmed = true; stderr += '\nProcess cleanup could not be confirmed.'; finish(code); }, 5000);
     };
     const cancel = () => stop(-998);
-    const timer = setTimeout(() => stop(-999), timeoutMs);
     options.signal?.addEventListener('abort', cancel, { once: true });
     if (options.signal?.aborted) cancel();
     proc.stdout.setEncoding('utf8'); proc.stderr.setEncoding('utf8');
-    proc.stdout.on('data', d => { stdout += d; options.onChunk?.({ stream: 'stdout', text: d }); });
-    proc.stderr.on('data', d => { stderr += d; options.onChunk?.({ stream: 'stderr', text: d }); });
+    proc.stdout.on('data', d => {
+      stdout += d;
+      resetTimer();
+      options.onChunk?.({ stream: 'stdout', text: d });
+    });
+    proc.stderr.on('data', d => {
+      stderr += d;
+      resetTimer();
+      options.onChunk?.({ stream: 'stderr', text: d });
+    });
     proc.stdin.on('error', () => { /* A CLI can exit before consuming stdin. */ });
 
     proc.on('close', (code) => {

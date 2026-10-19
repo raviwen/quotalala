@@ -218,15 +218,14 @@ class QuotaManager {
       lower.includes('quota') ||
       lower.includes('usage limit') ||
       lower.includes('too many requests') ||
-      lower.includes('429') ||
-      lower.includes('exhausted') ||
-      lower.includes('capacity') ||
-      lower.includes('overloaded')
+      /\b429\b/.test(lower) ||
+      lower.includes('exhausted')
     );
   }
 
   extractRenewalTime(msg) {
-    let minutes = 15;
+    // Keep the default in sync with the task board's 30-minute quota fallback.
+    let minutes = 30;
     const regex = /(\d+)\s*(minute|min|hour|hr|second|sec)/i;
     const match = msg.match(regex);
     if (match) {
@@ -239,23 +238,35 @@ class QuotaManager {
     return new Date(Date.now() + minutes * 60 * 1000);
   }
 
-  getTraySummary() {
+  getTraySummary(lang = 'tr') {
     const s = this.getState();
     const c = s.agents.claude;
     const x = s.agents.codex;
     const g = s.agents.gemini;
+    const tr = lang !== 'en';
+    const labels = {
+      off: tr ? 'Kapalı' : 'Off',
+      untested: tr ? 'Test edilmedi' : 'Not tested',
+      error: tr ? 'Hata' : 'Error',
+      limited: tr ? 'Dolu/Limitli' : 'Limited',
+      unauthenticated: tr ? 'Giriş Yok' : 'Signed out',
+      running: tr ? 'Çalışıyor' : 'Running',
+      ready: tr ? 'Hazır' : 'Ready'
+    };
+    const title = tr ? 'Quotalala AI Durumu:' : 'Quotalala AI status:';
+    const jobs = tr ? 'iş' : 'jobs';
 
     const statusText = (a) => {
-      if (!a.enabled) return 'Kapalı';
-      if (!a.health && a.status === 'idle') return 'Test edilmedi';
-      if (a.status === 'error' || a.status === 'missing') return 'Hata';
-      if (a.status === 'limited') return 'Dolu/Limitli';
-      if (a.status === 'unauthenticated') return 'Giriş Yok';
-      if (a.status === 'running') return 'Çalışıyor';
-      return 'Hazır';
+      if (!a.enabled) return labels.off;
+      if (!a.health && a.status === 'idle') return labels.untested;
+      if (a.status === 'error' || a.status === 'missing') return labels.error;
+      if (a.status === 'limited') return labels.limited;
+      if (a.status === 'unauthenticated') return labels.unauthenticated;
+      if (a.status === 'running') return labels.running;
+      return labels.ready;
     };
 
-    return `Quotalala AI Durumu:\n• Claude: ${statusText(c)} (${c.jobsCompleted} iş)\n• Codex: ${statusText(x)} (${x.jobsCompleted} iş)\n• Gemini: ${statusText(g)} (${g.jobsCompleted} iş)`;
+    return `${title}\n• Claude: ${statusText(c)} (${c.jobsCompleted} ${jobs})\n• Codex: ${statusText(x)} (${x.jobsCompleted} ${jobs})\n• Gemini: ${statusText(g)} (${g.jobsCompleted} ${jobs})`;
   }
 }
 

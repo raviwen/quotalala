@@ -229,3 +229,23 @@ test('identical failed work is blocked across management-created tasks without a
   const result = await f.run(); assert.equal(workers, 1); assert.equal(result.session.status, 'failed');
   assert.equal(result.session.turns[0].outputs[1].status, 'blocked');
 });
+
+test('a resumed worker keeps its CLI session and receives only the new instruction', async t => {
+  let workerRuns = 0, decisions = 0;
+  const f = fixture(t, 'worker-resume', { act: (id, prompt, options) => {
+    if (options.phase === 'coordination') return ++decisions === 1
+      ? response({ action: 'continue', reason: 'Answer the design question', messages: [{ step: 1, toAgent: 'codex', content: 'Use the existing SQLite adapter.' }] })
+      : done();
+    workerRuns++;
+    if (workerRuns === 1) return { ...worker('needs_input', 'Which adapter?'), sessionId: 'sess-worker-1' };
+    assert.equal(options.resumeId, 'sess-worker-1');
+    assert.ok(!/PROJE HAFIZASI/.test(prompt), 'a resumed prompt must not resend memory');
+    assert.match(prompt, /Use the existing SQLite adapter/);
+    return { ...worker('completed', 'Adapter implemented'), sessionId: 'sess-worker-1' };
+  } });
+  const result = await f.run(), turn = result.session.turns[0];
+  assert.equal(result.session.status, 'completed'); assert.equal(workerRuns, 2);
+  assert.equal(turn.teamState.workerSessions[1], 'sess-worker-1');
+  assert.equal(turn.teamState.replies[1], 1);
+  assert.ok(f.calls.every(call => call.options.resumeId === 'sess-worker-1' || call.options.resumeId === undefined));
+});

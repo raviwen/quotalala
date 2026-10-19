@@ -30,7 +30,9 @@ for (const file of files.filter(file => /\.(?:js|json|md|yml|yaml)$/.test(file))
   assert.ok(!/C:\\+Users\\+[A-Za-z0-9_-]+\\/i.test(source), `Personal Windows path found in ${file}`);
 }
 const models = JSON.parse(fs.readFileSync(path.join(root, 'src/main/default-models.json'), 'utf8'));
-assert.ok(models.every(model => model.source && model.name && model.agent !== 'gemini'), 'Only locally verified default models may ship');
+assert.ok(models.every(model => model.source && model.name && model.verified === true), 'Only source-verified default models may ship');
+const agyNames = new Set(fs.readFileSync(path.join(root, 'test/fixtures/agy-models.txt'), 'utf8').trim().split(/\r?\n/).map(line => line.split(/\s+/)[0]));
+assert.ok(models.filter(model => model.agent === 'gemini').every(model => agyNames.has(model.name)), 'Gemini defaults must match the supplied agy models evidence');
 const html = fs.readFileSync(path.join(root, 'src/renderer/index.html'), 'utf8');
 for (const file of files.filter(file => /^README(?:\.[a-z]{2})?\.md$/.test(file))) {
   const markdown = fs.readFileSync(path.join(root, file), 'utf8');

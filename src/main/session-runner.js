@@ -40,6 +40,12 @@ class SessionRunner {
       try { return this.store.save(session); }
       catch (error) { persistenceError = error; throw error; }
     };
+    // Batch frequent activity/output/team-state writes into ~250ms windows;
+    // critical transitions (plan approval, turn end) still save immediately.
+    const runSave = () => { try { persist(); } catch {} };
+    let pendingSave = null;
+    const scheduleSave = () => { if (pendingSave) return; pendingSave = setTimeout(() => { pendingSave = null; runSave(); }, 250); };
+    const flushSave = () => { clearTimeout(pendingSave); pendingSave = null; runSave(); };
     let lastStreamSave = 0, streamTimer;
     const pendingChunks = new Map(), streamIndexes = new Map();
     const sendChunk = chunk => {
@@ -70,7 +76,7 @@ class SessionRunner {
       options, approvedPlan: previous?.planApproved === true, signal: this.controller.signal, cancel: () => this.cancel(),
       previousOutputs: previous?.plan ? previous.plan.workflow === 'managed-v1' ? previous.outputs || [] : (previous.outputs || []).filter(o => o.success) : [],
       previousTeamState: previous?.teamState,
-      onTeamState: value => { turn.teamState = value; persist(); },
+      onTeamState: value => { turn.teamState = value; scheduleSave(); },
       onPlanChanged: plan => { turn.plan = plan; this.emit('session:plan', { sessionId: session.id, plan: sanitize(plan) }); },
       reviewBatch: options.previewPlan ? plan => waitForApproval(plan, plan.subtasks.map(task => task.id)) : undefined,
       flushStream,
@@ -87,7 +93,7 @@ class SessionRunner {
         const activity = activityEntry({ ...value, turnId: turn.id });
         turn.activities.push(activity);
         for (const id of [activity.agent, activity.fromAgent, activity.toAgent]) if (id && !session.agents.includes(id)) session.agents.push(id);
-        persist();
+        scheduleSave();
         this.emit('session:activity', { sessionId: session.id, turnId: turn.id, activity });
         return activity;
       },
@@ -96,7 +102,7 @@ class SessionRunner {
         if (entry.agent && !session.agents.includes(entry.agent)) session.agents.push(entry.agent);
         this.emit('stream:log', { ...entry, sessionId: session.id });
       },
-      onOutput: output => { const old = turn.outputs.findIndex(o => o.step === output.step); if (old >= 0) turn.outputs.splice(old, 1); turn.outputs.push(output); persist(); this.emit('session:output', { sessionId: session.id, output: sanitize(output) }); }
+      onOutput: output => { const old = turn.outputs.findIndex(o => o.step === output.step); if (old >= 0) turn.outputs.splice(old, 1); turn.outputs.push(output); scheduleSave(); this.emit('session:output', { sessionId: session.id, output: sanitize(output) }); }
     };
     try {
       persist();
@@ -128,6 +134,7 @@ class SessionRunner {
       if (!error.logged && turn.status !== 'cancelled') context.log(failure(error.agent || 'claude', error.message));
     } finally {
       flushStream();
+      flushSave();
       turn.evidence = evidence.compare(context.evidenceBefore, await evidence.snapshot(cwd));
       const resultDigests = [...new Set(turn.outputs.filter(o => o.success && o.output?.trim()).map(o => createHash('sha256').update(sanitize(o.output).trim()).digest('hex')))];
       const hasNewInformation = resultDigests.some(digest => !memoryRecord.resultDigests.includes(digest));

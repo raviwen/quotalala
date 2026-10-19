@@ -1,4 +1,5 @@
 const BaseAgent = require('./base-agent');
+const { createClaudeStream } = require('../claude-stream');
 
 class ClaudeAgent extends BaseAgent {
   constructor() {
@@ -12,7 +13,8 @@ class ClaudeAgent extends BaseAgent {
   }
 
   getRunArgs(prompt, options = {}) {
-    const args = ['-p', '--output-format', options.healthTest ? 'text' : 'json'];
+    const args = ['-p', '--output-format', options.healthTest ? 'text' : 'stream-json'];
+    if (!options.healthTest) args.push('--verbose', '--include-partial-messages');
     if (options.model) args.push('--model', options.model);
     if (options.thinking) args.push('--effort', options.thinking);
     if (options.resumeId && this.capabilities?.resume) args.push('--resume', options.resumeId);
@@ -21,16 +23,13 @@ class ClaudeAgent extends BaseAgent {
   }
 
   async runPrompt(prompt, options = {}) {
-    const res = await super.runPrompt(prompt, options);
-    if (!options.healthTest && res.code === 0) {
-      try {
-        const data = JSON.parse(res.stdout);
-        res.stdout = data.result || '';
-        res.sessionId = data.session_id;
-        if (data.is_error) { res.code = 1; res.stderr = res.stdout; }
-      } catch { res.code = 1; res.stderr = 'Invalid Claude JSON response: ' + res.stdout; }
-    }
-    return res;
+    if (options.healthTest) return super.runPrompt(prompt, options);
+    const stream = createClaudeStream(options);
+    let received = false;
+    const res = await super.runPrompt(prompt, { ...options, onChunk: chunk => { received = true; stream.push(chunk); } });
+    // Also support execute implementations that return buffered output only.
+    if (!received && res.stdout) stream.push({ stream: 'stdout', text: res.stdout });
+    return stream.finish(res);
   }
 
   async checkAuth() {

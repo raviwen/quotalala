@@ -47,6 +47,43 @@ function setupMockAgents(t, act) {
   return { calls };
 }
 
+test('board streams planning, worker process and partial failure with redaction, persistence and early resume ID', async t => {
+  const testDir = path.join(root, 'stream-fixture'); fs.mkdirSync(testDir, { recursive: true });
+  const secret = 'sk-proj-' + 'x'.repeat(32);
+  setupMockAgents(t, (id, prompt, options) => {
+    assert.equal(options.cwd, testDir);
+    assert.equal(options.timeout, 420000);
+    if (options.reason === 'Pano görev planlama') {
+      options.onChunk({ stream: 'stdout', text: 'Planning now\n' });
+      return { code: 0, stdout: JSON.stringify({ title: 'Streaming fixture', agent: 'claude', level: 'hafif', workerPrompt: 'Inspect only', question: null }) };
+    }
+    options.onStart({ pid: 12345, executable: 'fixture-cli' });
+    options.onSession('early-session');
+    options.onChunk({ stream: 'stdout', text: 'Partial work\n' + secret.slice(0, 12) });
+    options.onChunk({ stream: 'stdout', text: secret.slice(12) });
+    return { code: -999, stdout: 'Partial work', stderr: 'Timeout: fixture', timedOut: true };
+  });
+  const board = new TaskBoard(testDir, root), task = board.add('Inspect project');
+  const store = new HistoryStore(root); store.saveSettings({ timeout: 420000 });
+  const events = [];
+  const runner = new BoardRunner({ cwd: testDir, root, board, store, emit: (channel, payload) => events.push({ channel, payload }) });
+  await runner.runTaskPipeline(task.id);
+  const saved = board.get(task.id);
+  assert.equal(saved.status, 'failed');
+  assert.equal(saved.cliSessionId, 'early-session');
+  assert.match(saved.liveOutput, /Planning now/);
+  assert.match(saved.liveOutput, /PID 12345/);
+  assert.match(saved.liveOutput, /Partial work/);
+  assert.match(saved.liveOutput, /Timeout/);
+  assert.ok(!JSON.stringify(events).includes(secret));
+  assert.ok(!JSON.stringify(saved).includes(secret));
+  const streams = events.filter(event => event.channel === 'board:stream');
+  assert.ok(streams.length > 2);
+  assert.ok(streams.every(event => event.payload.cwd === testDir && event.payload.chunk.replace));
+  // Reopening a board retains diagnostics; no CLI is invoked.
+  assert.match(new TaskBoard(testDir, root).get(task.id).liveOutput, /Partial work/);
+});
+
 test('intake produces valid JSON -> worker runs -> review approves -> ready_to_merge', async t => {
   const testDir = path.join(root, 'repo-happy');
   fs.mkdirSync(testDir, { recursive: true });

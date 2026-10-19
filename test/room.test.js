@@ -9,6 +9,14 @@ const { project } = require('../src/shared/team-room');
 const { TaskNotifications, showNotification } = require('../src/main/task-notifications');
 const { HistoryStore } = require('../src/main/storage');
 const agents = { claude: { enabled: true, status: 'idle' }, codex: { enabled: true, status: 'idle' }, gemini: { enabled: false, status: 'idle' } };
+test('board failure remains visible in the room and running desks show actual output', () => {
+  const task = { id: 'board-fixture', agent: 'claude', status: 'running', title: 'Write document', liveOutput: '[tool] Read: README.md', updatedAt: new Date().toISOString() };
+  assert.match(project({ agents, boardTasks: [task] }).lastMessage.text, /Read: README/);
+  const failed = project({ agents, boardTasks: [{ ...task, status: 'failed', history: [{ text: 'Timeout: 180000ms' }] }] });
+  assert.equal(failed.desks.find(desk => desk.id === 'claude').status, 'blocked');
+  assert.match(failed.lastMessage.text, /Timeout/);
+  assert.equal(failed.active, false);
+});
 const event = (type, agent = 'claude', extra = {}) => ({ id: randomUUID(), timestamp: new Date().toISOString(), type, agent, ...extra });
 const desk = (model, id) => model.desks.find(item => item.id === id);
 function turn(activities, outputs = [], status = 'running', mode = 'coordinated') { return { activities, outputs, status, options: { mode } }; }

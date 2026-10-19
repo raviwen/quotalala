@@ -2,6 +2,20 @@
 (function (root) {
   const names = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' };
   const glyphs = { claude: '✳', codex: '›_', gemini: '✦' };
+  // Bubbles are short by design; cut on a word boundary and drop raw process headers.
+  function clip(text, max = 100) {
+    const clean = String(text || '')
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && !/^\[process\]/i.test(line))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (clean.length <= max) return clean;
+    const cut = clean.slice(0, max - 1);
+    const space = cut.lastIndexOf(' ');
+    return `${(space > max * 0.55 ? cut.slice(0, space) : cut).replace(/[\s,;:.\-]+$/, '')}…`;
+  }
   function node(tag, className, text) {
     const value = document.createElement(tag); value.className = className;
     if (text !== undefined) value.textContent = text;
@@ -54,7 +68,7 @@
         ui.details.textContent = t('agentDetails'); ui.details.setAttribute('aria-label', `${names[desk.id]} • ${t('agentDetails')}`);
         ui.bubble.disabled = !desk.message;
         ui.bubbleIcon.textContent = desk.message ? desk.message.type === 'agent_question' ? '?' : desk.message.type === 'coordinator_reply' ? '↳' : '↗' : desk.status === 'disabled' ? '·' : '…';
-        ui.bubbleText.textContent = desk.message ? desk.message.text.replace(/\s+/g, ' ').slice(0, 100) : t(desk.status === 'disabled' ? 'roomClosedBubble' : 'roomIdleBubble');
+        ui.bubbleText.textContent = desk.message ? clip(desk.message.text) : t(desk.status === 'disabled' ? 'roomClosedBubble' : 'roomIdleBubble');
         ui.bubble.title = desk.message ? `${names[desk.message.from]} → ${names[desk.message.to]} • ${t('roomOpenMessage')}` : t('room_status_' + desk.status);
         ui.station.setAttribute('aria-label', `${names[desk.id]}, ${ui.status.textContent}${desk.taskTitle ? ', ' + desk.taskTitle : ''}`);
       }

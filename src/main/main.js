@@ -41,10 +41,18 @@ function getBoardRunner(cwd) {
   }
   return boardRunners.get(resolved);
 }
+function pruneBoardRunners(activeCwd) {
+  const active = activeCwd ? path.resolve(activeCwd) : null;
+  for (const [cwd, runner] of [...boardRunners]) {
+    if (cwd === active || runner.hasActiveTasks()) continue;
+    runner.stop();
+    boardRunners.delete(cwd);
+  }
+}
 function flushProject() {
   if (!pendingProject || runner.busy || health.running) return;
   const cwd = pendingProject; pendingProject = null;
-  try { emit('workspace:changed', workspace.open(cwd)); } catch (error) { emit('stream:log', failure(null, error.message)); }
+  try { emit('workspace:changed', workspace.open(cwd)); pruneBoardRunners(workspace.get().cwd); } catch (error) { emit('stream:log', failure(null, error.message)); }
 }
 app.on('second-instance', (event, argv, workingDirectory, request) => {
   // Chromium may reorder switches in commandLine; additionalData preserves argv adjacency.
@@ -78,7 +86,7 @@ function emit(channel, payload) {
 }
 const health = new HealthService({ agents: getAllAgents(), quota, models, emit });
 const runner = new SessionRunner({ store, coordinator, emit, publish: () => { health.publish(); updateTray(); } });
-function updateTray() { tray?.setToolTip(quota.getTraySummary()); }
+function updateTray() { tray?.setToolTip(quota.getTraySummary(language)); }
 function notify(title, body, click = () => { mainWindow?.show(); mainWindow?.focus(); }) {
   try { return showNotification(Notification, { title, body, icon: appIcon.isEmpty() ? iconPath : appIcon, click }); } catch { return false; }
 }
@@ -176,7 +184,9 @@ register('workspace:open', async cwd => {
     if (result.canceled) return workspace.get();
     cwd = result.filePaths[0];
   }
-  return workspace.open(cwd);
+  const opened = workspace.open(cwd);
+  pruneBoardRunners(opened.cwd);
+  return opened;
 });
 register('clipboard:copy', text => { if (typeof text !== 'string' || text.length > 10000000) throw new Error('Invalid clipboard text.'); return clipboard.writeText(text); });
 register('text:menu', ({ selection, all }) => {
