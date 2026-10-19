@@ -50,7 +50,7 @@ if (!peer) app.whenReady().then(async () => {
     const js = code => win.webContents.executeJavaScript(code);
     const until = async expression => {
       for (let i = 0; i < 150; i++) { if (await js(expression)) return; await new Promise(resolve => setTimeout(resolve, 30)); }
-      console.error(await js("JSON.stringify({busy, project, deferredWorkspace, notice:document.getElementById('notice').textContent, logs})"));
+      console.error(await js("JSON.stringify({busy, project, deferredWorkspace, notice:document.getElementById('notice').textContent, logs, disabled:document.getElementById('planAndExecuteBtn').disabled, healthRunning:state.healthRunning, health:state.agents&&Object.fromEntries(Object.entries(state.agents).map(([k,v])=>[k,v.status])), mode:document.getElementById('runMode').value, previewChecked:document.getElementById('previewPlan').checked, previewDisabled:document.getElementById('previewPlan').disabled, prompt:document.getElementById('promptInput').value})"));
       throw new Error('Condition timed out: ' + expression);
     };
     await new Promise(resolve => win.webContents.once('did-finish-load', resolve));
@@ -60,7 +60,9 @@ if (!peer) app.whenReady().then(async () => {
     await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
     await until("document.querySelector('.history-open') !== null");
     assert.match(await js("document.getElementById('historyList').textContent"), /Beklenmedik kapanma/);
-    await js("document.getElementById('promptInput').value='Mock task'; document.getElementById('planAndExecuteBtn').click()");
+    // The composer button now queues a background board task; this fixture still
+    // exercises the coordinated run, its plan approval and the team room directly.
+    await js("document.getElementById('promptInput').value='Mock task'; void perform(runSession)");
     await until("document.getElementById('planDialog').open");
     let secondEvent = false; app.once('second-instance', () => { secondEvent = true; });
     const child = spawn(process.execPath, [__filename, '--project', b], { env: { ...process.env, QUOTALALA_INSTANCE_FIXTURE: root }, windowsHide: true, stdio: 'ignore' });
@@ -73,7 +75,7 @@ if (!peer) app.whenReady().then(async () => {
     const store = new (require('../src/main/storage').HistoryStore)(root);
     const cancelled = store.list(a).find(session => session.status === 'cancelled');
     assert.ok(cancelled); assert.equal(store.open(cancelled.id).cwd, fs.realpathSync(a));
-    await js("document.getElementById('previewPlan').checked=false; document.getElementById('promptInput').value='Team UI fixture'; document.getElementById('planAndExecuteBtn').click()");
+    await js("document.getElementById('previewPlan').checked=false; document.getElementById('promptInput').value='Team UI fixture'; void perform(runSession)");
     await until("document.getElementById('room-codex').dataset.status === 'working'");
     assert.equal(await js("document.getElementById('room-gemini').dataset.status"), 'disabled');
     assert.equal(await js("document.querySelector('#room-codex .person-head') && getComputedStyle(document.querySelector('#room-codex .person-head')).animationName"), 'office-work-bob');
