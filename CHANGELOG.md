@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Continue a task's worker in the same CLI session: follow-up answers resume the original session and send only the new instruction instead of re-sending goal, memory and shared results (the managed coordinator session is resumed the same way, and only new results are sent each round).
+- Separate attempt and reply-round counters so a worker can answer a few coordinator questions without consuming its retry budget.
+- Planning sends a compact level-to-model summary instead of the full model catalog on every call.
+- A missing CLI, a signed-out account or a hard agent error now fails the board task instead of parking it for 30 minutes; only real quota limits wait.
+- Transient "capacity"/"overloaded" errors are no longer classified as quota, and the default renewal wait matches the board's 30 minutes.
+- Coordinator Claude model defaults to Sonnet instead of Opus (the strongest model is not the default).
+- Task budgets (subtasks, attempts, reply rounds, management rounds, calls) are configurable in Settings with safe clamping.
+- Board intake can use Gemini when the user has explicitly enabled it.
+- Tray status and thinking-level labels are localized; Linux CI job runs the source checks and full offline test suite.
+
+## 1.2.4 — 2026-10-19
+
+- Stream Claude text and tool activity before completion using the official stream-json interface, keeping canonical final results separate.
+- Show board planning, worker and review output, actual process IDs and work directories; preserve redacted partial output and early session IDs after failure.
+- Use the configured board timeout and keep failed desks visible in the team room.
+- Verify streaming, persistence, cancellation and the Electron output view with mock CLIs; no subscription prompts used.
+
 ## 1.2.0 — 2026-10-18
 
 ### Task Board & Concurrent Execution

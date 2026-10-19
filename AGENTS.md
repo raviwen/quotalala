@@ -102,7 +102,7 @@ dağıtan yerel bir masaüstü (Electron) uygulamasıdır. Claude baş koordinat
 3. Arayüz i18n (TR/EN) ve tekil ajan prompt testi (Tamamlandı)
 4. Claude koordinatör ile çoklu ajan görev dağıtımı (Tamamlandı)
 5. Kota takibi, oran sınırları ve otomatik görev devri (Tamamlandı)
-6. Model seçimi: models.json, zorluk/maliyet bazlı seçim, geri düşme (Seviye seçimi, ayarlar ve CLI varsayılanına geri düşme tamamlandı; otomatik model keşfi bekliyor)
+6. Model seçimi: models.json, zorluk/maliyet bazlı seçim, geri düşme (Seviye seçimi, ayarlar ve CLI varsayılanına geri düşme tamamlandı; otomatik model keşfi `model-discovery.js` olarak uygulandı ve test edildi, yalnızca Ayarlar'daki keşif/onay arayüzü bekliyor)
 7. electron-builder ile NSIS Windows Installer (.exe) ve GitHub Releases hazırlığı (Yerel NSIS üretimi, paket doğrulama ve GitHub kontrol akışı hazır; GitHub üzerinde çalıştırma, temiz kurulum testi, imzalama kararı ve yayın bekliyor)
 8. Gemini düşünme seviyesi kontrolü (CLI desteği netleşince)
 9. Geçmiş & proje hafızası: yerel oturumlar, devam etme, 2000 karakter özet, gizlilik ayarları (Tamamlandı)
